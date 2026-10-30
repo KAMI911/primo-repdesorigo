@@ -217,14 +217,36 @@ ds_row: ld      c,(hl)
 ds_nc:  djnz    ds_row
         ret
 
-; clear_col16  HL = address of a byte in some row -> that byte and the 15 below it zeroed. HL preserved.
-; Clobbers AF,BC,DE.
+; clear_col16  HL = address of a byte in some row -> that byte and the 15 below it cleared (rows inside the
+; parallax band get the background byte back). HL preserved. Clobbers AF,BC,DE.
 clear_col16:
         push    hl
-        ld      de,32
+        ld      a,(v_scr+1)
+        add     a,0x11
+        ld      c,a                     ; high byte of the band's first row
         ld      b,16
-        xor     a
-cc_row: ld      (hl),a
+cc_row: ld      a,h
+        cp      c
+        jr      c,cc_zero
+        jr      nz,cc_bg
+        ld      a,l
+        cp      0x80
+        jr      c,cc_zero
+cc_bg:  push    hl
+        ld      a,l
+        sub     0x80
+        ld      e,a
+        ld      a,h
+        sbc     a,c
+        ld      d,a
+        ld      hl,bg_far
+        add     hl,de
+        ld      a,(hl)
+        pop     hl
+        jr      cc_put
+cc_zero:xor     a
+cc_put: ld      (hl),a
+        ld      de,32
         add     hl,de
         djnz    cc_row
         pop     hl
@@ -256,16 +278,132 @@ dgr_row:push    bc
         djnz    dgr_row
         ret
 
+; ------------------------------------------------------------ parallax ----
+; Three 12-row layers (bg_far city, bg_mid forest, bg_near field) of 256 px, stacked above the ground. They live
+; in RAM and are rotated in place, one pixel to the left per update, then copied to the screen with one LDIR.
+; bg_step updates at most one layer per frame (field every 4th, forest every 8th, city every 16th frame), so the
+; layers move 1/4, 1/8 and 1/16 px per frame. Under the bottom pipes the layers show through around the pipe (see seg). Pipes and the bird are drawn afterwards and cover them.
+
+; bg_rot  HL = layer -> every row rotated one pixel left (circular). ~9000 T-states. Clobbers AF,BC,DE,HL.
+bg_rot:
+        ld      b,BG_ROWS
+br_row: ld      a,(hl)                  ; first byte: its bit 7 wraps around into the last byte
+        ld      de,31
+        add     hl,de
+        rla                             ; carry = bit 7 of the first byte (RLA's carry-out ignores carry-in)
+        rept    32
+        rl      (hl)
+        dec     hl
+        endr
+        ld      de,33                   ; HL = row start - 1 -> next row start
+        add     hl,de
+        djnz    br_row
+        ret
+
+; bg_blit  HL = layer, A = first pixel row -> the layer's rows copied to the screen (rows are contiguous).
+; Clobbers AF,BC,DE,HL.
+bg_blit:
+        push    hl
+        call    row_addr
+        ex      de,hl
+        pop     hl
+        ld      bc,BG_ROWS * 32
+        ldir
+        ret
+
+; bg_draw_all: draw the three layers as they are now. Clobbers all.
+bg_draw_all:
+        ld      hl,bg_far
+        ld      a,BG_Y_FAR
+        call    bg_blit
+        ld      hl,bg_mid
+        ld      a,BG_Y_MID
+        call    bg_blit
+        ld      hl,bg_near
+        ld      a,BG_Y_NEAR
+        jr      bg_blit
+
+; bg_step: scroll one layer according to v_anim & 15: 0,4,8,12 field; 2,10 forest; 6 city; others none.
+; Clobbers all.
+bg_step:
+        ld      a,(v_anim)
+        and     15
+        ld      c,a
+        and     3
+        jr      z,bgs_near
+        ld      a,c
+        cp      6
+        jr      z,bgs_far
+        cp      2
+        jr      z,bgs_mid
+        cp      10
+        ret     nz
+bgs_mid:ld      hl,bg_mid
+        ld      a,BG_Y_MID
+        jr      bgs_go
+bgs_far:ld      hl,bg_far
+        ld      a,BG_Y_FAR
+        jr      bgs_go
+bgs_near:ld     hl,bg_near
+        ld      a,BG_Y_NEAR
+bgs_go: push    af
+        push    hl
+        call    bg_rot
+        pop     hl
+        pop     af
+        jr      bg_blit
+
 ; ---------------------------------------------------------------- pipes ----
 ; seg  HL = first source byte, B = rows (0 = none), DE = destination. Copies v_n bytes per row, rows are
 ; 32 bytes apart. Returns DE = start position of the next row. Needs v_n16 (= n) and v_adj (= 32 - n).
 ; ~210 T-states per row for n = 5. Clobbers AF,BC,HL.
+; Rows from BG_Y_FAR down are in the parallax band. When the window is complete (v_full: 5 bytes, nothing clipped)
+; those rows are merged with the background instead of copied: byte 0 and 3 keep the background pixels outside the
+; pipe's 24 px footprint (masks patched into seg_kl / seg_kr), bytes 1 and 2 are all pipe, byte 4 is background.
+; ~290 T-states per row.
 seg:
         ld      a,b
         or      a
         ret     z
         ld      (v_src),hl
         ld      (v_rows),a
+        xor     a
+        ld      (v_q),a
+        ld      a,(v_full)
+        or      a
+        jr      z,seg_row
+        ld      a,(v_scr+1)             ; first row = (DE - screen base) / 32
+        ld      c,a
+        ld      a,d
+        sub     c
+        add     a,a
+        add     a,a
+        add     a,a
+        ld      c,a
+        ld      a,e
+        rlca
+        rlca
+        rlca
+        and     7
+        or      c
+        cp      BG_Y_FAR
+        jr      nc,seg_band0            ; starts inside the band
+        ld      c,a
+        ld      a,BG_Y_FAR
+        sub     c                       ; rows before the band
+        ld      c,a
+        ld      a,(v_rows)
+        sub     c
+        jr      c,seg_row               ; ends before the band
+        jr      z,seg_row
+        ld      (v_q),a                 ; rows inside the band
+        ld      a,c
+        ld      (v_rows),a              ; rows before it
+        jr      seg_row
+seg_band0:
+        ld      a,(v_rows)
+        ld      (v_q),a
+        jr      seg_band
 seg_row:ld      hl,(v_src)
         ld      bc,(v_n16)
         ldir
@@ -278,7 +416,119 @@ seg_nc: ld      a,(v_rows)
         dec     a
         ld      (v_rows),a
         jr      nz,seg_row
+        ld      a,(v_q)
+        or      a
+        ret     z
+seg_band:                               ; v_q rows, DE = first of them
+        ld      a,(v_scr+1)
+        add     a,0x11                  ; high byte of the band's first row
+        ld      b,a
+        ld      a,e
+        sub     0x80
+        ld      c,a
+        ld      a,d
+        sbc     a,b
+        ld      b,a                     ; BC = DE - band start
+        ld      hl,bg_far
+        add     hl,bc
+        ld      b,h
+        ld      c,l                     ; BC = background byte under DE
+sb_row: ld      hl,(v_src)
+        ld      a,(bc)
+seg_kl: and     0                       ; patched: background bits left of the pipe
+        or      (hl)
+        ld      (de),a
+        inc     bc
+        inc     hl
+        inc     de
+        ld      a,(hl)
+        ld      (de),a
+        inc     bc
+        inc     hl
+        inc     de
+        ld      a,(hl)
+        ld      (de),a
+        inc     bc
+        inc     hl
+        inc     de
+        ld      a,(bc)
+seg_kr: and     0                       ; patched: background bits right of the pipe
+        or      (hl)
+        ld      (de),a
+        inc     bc
+        inc     de
+        ld      a,(bc)
+        ld      (de),a                  ; trailing byte: background
+        ld      a,e
+        add     a,28
+        ld      e,a
+        jr      nc,sb_n1
+        inc     d
+sb_n1:  ld      a,c
+        add     a,28
+        ld      c,a
+        jr      nc,sb_n2
+        inc     b
+sb_n2:  ld      hl,v_q
+        dec     (hl)
+        jr      nz,sb_row
         ret
+
+; seg_gap  B = rows, DE = destination: v_n bytes per row (v_n16, v_adj as for seg) cleared, except in the band,
+; where the background is restored. Returns DE = start of the next row. Clobbers AF,BC,HL.
+seg_gap:
+        ld      a,b
+        or      a
+        ret     z
+        ld      (v_rows),a
+sg_row: ld      a,(v_scr+1)
+        add     a,0x11
+        ld      c,a
+        ld      a,d
+        cp      c
+        jr      c,sg_zero
+        jr      nz,sg_bg
+        ld      a,e
+        cp      0x80
+        jr      c,sg_zero
+sg_bg:  ld      a,e                     ; background bytes: HL = bg_far + (DE - band start)
+        sub     0x80
+        ld      l,a
+        ld      a,d
+        sbc     a,c
+        ld      h,a
+        ld      bc,bg_far
+        add     hl,bc
+        ld      bc,(v_n16)
+        push    de
+        ldir
+        pop     de
+        jr      sg_next
+sg_zero:push    de
+        ld      h,d
+        ld      l,e
+        ld      bc,(v_n16)
+        ld      (hl),0
+        dec     bc
+        ld      a,b
+        or      c
+        jr      z,sg_zd
+        inc     de
+        ldir
+sg_zd:  pop     de
+sg_next:ld      a,e                     ; DE is the row start again: next row = +32
+        add     a,32
+        ld      e,a
+        jr      nc,sg_nc
+        inc     d
+sg_nc:  ld      a,(v_rows)
+        dec     a
+        ld      (v_rows),a
+        jr      nz,sg_row
+        ret
+
+; kl_tab: background bits left of the pipe in the window's first byte, by pixel shift (top s bits)
+kl_tab: defb    0x00,0x80,0xC0,0xE0,0xF0,0xF8,0xFC,0xFE
 
 ; draw_pipe  IX = pipe (x signed 16 bit, gap top, flags). Draws the pipe's 5-byte-wide window (24 px pipe +
 ; 7 px shift + 1 byte trailing blank that erases what the 2 px step leaves behind) for rows 16..175, clipped to
@@ -363,6 +613,27 @@ dp_c9:  ld      a,(v_cov)
         ld      a,1
         ld      (v_ovl),a
 dp_nocov:
+        ; --- complete window (5 bytes, none clipped)? then the rows in the parallax band merge with the background
+        xor     a
+        ld      (v_full),a
+        ld      a,(v_n)
+        cp      5
+        jr      nz,dp_nf
+        ld      a,(v_k)
+        or      a
+        jr      nz,dp_nf
+        inc     a
+        ld      (v_full),a
+        ld      a,(v_s)
+        ld      e,a
+        ld      d,0
+        ld      hl,kl_tab
+        add     hl,de
+        ld      a,(hl)
+        ld      (seg_kl + 1),a
+        cpl
+        ld      (seg_kr + 1),a
+dp_nf:
         ; --- source pointers and copy parameters
         ld      a,(v_n)
         ld      (v_n16),a
@@ -404,13 +675,8 @@ dp_nocov:
         ld      a,(v_ovl)
         or      a
         jr      z,dp_skip
-        ld      a,(v_k)
-        ld      c,a
-        ld      b,0
-        ld      hl,pat_zero
-        add     hl,bc
         ld      b,GAP_H
-        call    seg
+        call    seg_gap
         jr      dp_bot
 dp_skip:ld      hl,GAP_H * 32
         add     hl,de

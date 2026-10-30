@@ -303,6 +303,7 @@ play:
         ld      a,(v_color)
         call    clear_screen
         call    draw_ground
+        call    bg_draw_all
         call    pipes_reset
         ld      hl,BIRD_Y0 * 256
         ld      (v_y),hl
@@ -398,7 +399,8 @@ pl_noflap:
         call    beep
         ld      bc,0x0C3C
         call    beep
-pl_draw:call    render_frame
+pl_draw:call    bg_step                 ; one parallax layer scrolls, then pipes and bird are drawn over it
+        call    render_frame
         call    collide_all
         or      a
         jr      nz,pl_dead

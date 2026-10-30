@@ -7,6 +7,10 @@ defc PIPE_MIN_X   = -32                 ; below this the pipe is gone (one blank
 defc GAP_H        = 60
 defc GT_MIN       = 40                  ; gap top range 40..92 (53 values)
 defc GT_RANGE     = 53
+defc BG_ROWS      = 12                  ; parallax layers: 12 rows each, stacked above the ground
+defc BG_Y_FAR     = 140                 ; city
+defc BG_Y_MID     = 152                 ; forest
+defc BG_Y_NEAR    = 164                 ; field
 defc PLAY_TOP     = 16                  ; rows 0..15 = HUD
 defc PLAY_BOT     = 176                 ; rows 176..191 = ground
 defc BIRD_COL     = 8                   ; sprite is 2 bytes (16 px) wide, byte aligned

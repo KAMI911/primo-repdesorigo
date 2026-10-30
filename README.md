@@ -55,6 +55,14 @@ A `-bw` és `-col` változat ugyanaz a kód a modellfelismerés nélkül; a legt
 | `tools/ptp.py` | `.ptp` író/ellenőrző, WAV (a Primo skill másolata) |
 | `tests/` | `run_tests.py` + `test_units.asm`: tábla-vezérelt egységtesztek Python-modell ellen, játékmenet-futtatás autopilottal |
 
+Háttér (parallax): három 12 soros réteg fut a föld fölött (a 140–175. pixelsorban): távol a város (ablakos épületek),
+középen az erdő (fenyők), elöl a mező (dombok, kerítés). Minden réteg egy 256 pixel széles, körbeforgó sáv a RAM-ban,
+amit helyben forgatunk egy pixellel balra, majd egyetlen `LDIR`-rel a képernyőre másolunk. Képkockánként legfeljebb
+egy réteg lép: a mező 4., az erdő 8., a város 16. kockánként (¼, ⅛, 1⁄16 pixel/kocka). A csövek alsó része a rétegek fölött
+úszik: ahol a cső ablaka teljes (5 bájt, nincs képernyőszélen), a cső 24 pixeles lábnyomán kívül a háttér látszik
+(`seg` a `gfx.asm`-ben), a madár törlése és a rés is visszaállítja a hátteret. Képernyő széléhez lógó cső ablakában a
+háttér még a régi módon nullázódik. A színes modellen a rétegek külön színt kapnak (szürkéskék / sötétzöld / világoszöld).
+
 Játékmenet: 256×192 pixel, a felső 16 sor a HUD, alul 16 sor föld. A csövek 2 pixelt lépnek játékkockánként,
 25 játékkocka/s (két képváltásonként egy). A rajzolás lépésenként csak a mozgó csöveket és a madarat frissíti.
 

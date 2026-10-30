@@ -5,6 +5,7 @@ Pure stdlib. `make` re-runs this when it changes; the output is committed so tha
 the build also works without Python's Pillow.  `--preview out.png` needs Pillow.
 """
 import math
+import random
 import sys
 
 # ---------------------------------------------------------------- font -------
@@ -178,6 +179,78 @@ def pipe_table():
 
 GROUND = [0xFF, 0x00, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55]
 
+# ------------------------------------------------------- parallax layers -----
+BG_ROWS = 12                    # rows per layer; the three layers stack above the ground (rows 140..175)
+BG_W = 256                      # every layer is one 256 px wide strip that wraps around seamlessly
+
+
+def _layer(draw):
+    px = [[0] * BG_W for _ in range(BG_ROWS)]
+
+    def put(x, y):
+        if 0 <= y < BG_ROWS:
+            px[y][x % BG_W] = 1
+    draw(put)
+    return [sum(px[y][8 * b + i] << (7 - i) for i in range(8)) for y in range(BG_ROWS) for b in range(BG_W // 8)]
+
+
+def _city(put):
+    r = random.Random(11)
+    x = 0
+    while x < BG_W:
+        w = r.choice((10, 14, 18, 22))
+        if BG_W - x < 28:
+            w = BG_W - x            # last building closes the loop exactly
+        h = r.randint(6, BG_ROWS)
+        for dx in range(w):
+            for dy in range(h):
+                edge = dy == h - 1 or dx in (0, w - 1)
+                win = dx % 4 == 2 and dy % 3 == 1 and 0 < dx < w - 1 and dy < h - 1
+                if edge or win:
+                    put(x + dx, BG_ROWS - 1 - dy)
+        x += w
+
+
+def _forest(put):
+    r = random.Random(5)
+    x = 0
+    while x < BG_W:
+        w = r.choice((10, 12, 14))
+        if BG_W - x < 16:
+            w = BG_W - x
+        h = r.randint(7, 10)
+        mid = w // 2
+        top = BG_ROWS - 2 - h           # two trunk rows below the crown
+        for t in range(h):
+            half = (t * mid) // (h - 1)
+            for dx in range(-half, half + 1):
+                if abs(dx) == half or (dx + t) % 2 == 0:
+                    put(x + mid + dx, top + t)
+        for y in (BG_ROWS - 2, BG_ROWS - 1):
+            put(x + mid, y)
+        x += w
+
+
+def _field(put):
+    for x in range(BG_W):
+        top = 4 + int(round(2.0 * math.sin(x * 2 * math.pi / 64) + 1.2 * math.sin(x * 2 * math.pi / 32 + 1)))
+        put(x, top)
+        for y in range(top + 1, BG_ROWS):
+            if (x + 2 * y) % 5 == 0:
+                put(x, y)
+        if x % 3 == 0:
+            put(x, top - 1)
+    for fx in range(4, BG_W, 32):   # fence posts and rails
+        for y in range(BG_ROWS - 6, BG_ROWS):
+            put(fx, y)
+            put(fx + 1, y)
+    for x in range(BG_W):
+        put(x, BG_ROWS - 5)
+
+
+BG_LAYERS = (("bg_far", _city), ("bg_mid", _forest), ("bg_near", _field))
+
+
 # ---------------------------------------------------------------- strings ----
 STRINGS = {
     "s_title": "REPDESŐ RIGÓ",
@@ -227,6 +300,10 @@ def build():
             o.append(db(flat, 16))
     o += ["", "; pipe patterns: shift*16 + {0 body, 5 cap edge, 10 cap fill}, 5 bytes each", "pipe_tab:", db(pipe_table(), 16)]
     o += ["pat_zero:", "        defs    5,0", "", "ground_tab:", db(GROUND, 16), ""]
+    o += ["; parallax layers, %d rows x 32 bytes each; rotated in place at run time (they live in RAM)" % BG_ROWS]
+    for label, fn in BG_LAYERS:
+        o += [label + ":", db(_layer(fn), 32)]
+    o.append("")
     o += ["; bird names, one per bird, 0xFF-terminated", "bird_names:"]
     for i, n in enumerate(BIRD_NAMES):
         o.append("bn_%d:" % i)

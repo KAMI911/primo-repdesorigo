@@ -34,6 +34,8 @@ v_pb:       defw    0
 v_src:      defw    0
 v_n16:      defw    0
 v_adj:      defb    0
+v_full:     defb    0                   ; draw_pipe: window is complete (5 bytes, unclipped)
+v_q:        defb    0                   ; seg: rows left inside the parallax band
 v_rows:     defb    0
             defs    96                  ; stack
 stack_top:

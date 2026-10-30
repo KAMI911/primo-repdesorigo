@@ -126,46 +126,55 @@ clear_color:
         jp      colour_setup
 
 ; colour_setup (colour model only): palette entries 0..15 = pixel 0 colour, 16..31 = pixel 1 colour, picked by
-; the 4x4 cell nibble in colour RAM. Nibble 0 = night sky / white ink (everything), nibble 1 = brown / yellow
-; (ground). Palette bytes are stored inverted in all three banks. Clobbers AF,BC,DE,HL.
+; the 4x4 cell nibble in colour RAM (see pal_tab). Nibble 0 = night sky / white ink (everything), 1 = brown /
+; yellow (ground), 2 / 3 / 4 = sky / grey, green, light green ink (city, forest, field layers). Palette bytes are
+; stored inverted in all three banks. Clobbers AF,BC,DE,HL.
 defc PAL_SKY    = 0x0B                  ; RRRGGGBB dark blue
 defc PAL_WHITE  = 0xFF
 defc PAL_BROWN  = 0x88
 defc PAL_YELLOW = 0xFC
+defc PAL_CITY   = 0x6E                  ; grey-blue
+defc PAL_FOREST = 0x14                  ; dark green
+defc PAL_FIELD  = 0x7C                  ; light green
 colour_setup:
         ld      hl,COL_PAL1
         ld      c,3                     ; three banks of 32 bytes
 cs_bank:
+        ld      de,pal_tab
         ld      b,32
-        ld      d,0                     ; palette byte number
-cs_ent: ld      a,d
-        cp      16
-        ld      e,PAL_SKY
-        jr      c,cs_lo
-        ld      e,PAL_WHITE
-cs_lo:  ld      a,d
-        and     0x0F
-        cp      1
-        jr      nz,cs_put
-        ld      a,d
-        cp      16
-        ld      e,PAL_BROWN
-        jr      c,cs_put
-        ld      e,PAL_YELLOW
-cs_put: ld      a,e
+cs_ent: ld      a,(de)
         cpl
         ld      (hl),a
+        inc     de
         inc     hl
-        inc     d
         djnz    cs_ent
         dec     c
         jr      nz,cs_bank
         ld      a,0x81
         ld      (COL_CTRL),a
-        ld      hl,COL_RAM + (COLOR_TOP / 4 + 44) * 32  ; ground = game rows 176..191 = colour rows 46..49
-        ld      bc,4 * 32
+        ld      hl,COL_RAM + (COLOR_TOP / 4 + BG_Y_FAR / 4) * 32   ; layer cells, then the ground right below
+        ld      bc,3 * 32
+        ld      a,0x22
+        call    memfill
+        inc     hl                      ; memfill leaves HL on the last byte it wrote
+        ld      bc,3 * 32
+        ld      a,0x33
+        call    memfill
+        inc     hl
+        ld      bc,3 * 32
+        ld      a,0x44
+        call    memfill
+        inc     hl
+        ld      bc,4 * 32               ; ground = game rows 176..191 = colour rows 46..49
         ld      a,0x11
         jp      memfill
+
+; pal_tab: pixel 0 colours for nibble 0..15, then pixel 1 colours for nibble 0..15 (not inverted)
+pal_tab:
+        defb    PAL_SKY,PAL_BROWN,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY
+        defb    PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY
+        defb    PAL_WHITE,PAL_YELLOW,PAL_CITY,PAL_FOREST,PAL_FIELD,PAL_WHITE,PAL_WHITE,PAL_WHITE
+        defb    PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE
 
 ; beep  B = half-period delay (T ~ 16*B+30), C = number of half periods (1..255; 0 = 256).
 ; Toggles the speaker bit D4 starting from the shadow register value and restores it. NMI may click: harmless.

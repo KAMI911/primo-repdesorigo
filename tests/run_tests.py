@@ -97,8 +97,17 @@ def pattern_for_row(r, gt):
     return G.BODY
 
 
-def model_pipe(x, gt, screen):
-    """Draw one pipe into `screen` (bytearray, 32 bytes/row from row 0); returns v_cov."""
+BG_Y = 140                      # first row of the parallax band
+
+
+def bg_byte(bg, r, c):
+    return bg[(r - BG_Y) * 32 + c] if bg is not None and r >= BG_Y else 0
+
+
+def model_pipe(x, gt, screen, bg=None):
+    """Draw one pipe into `screen` (bytearray, 32 bytes/row from row 0); returns v_cov. `bg` = the three parallax
+    layers (bytes from row 140 on): complete windows (5 bytes, unclipped) keep the background outside the pipe's
+    24 px footprint in the band, and restored gap rows show it; clipped windows clear to zero as before."""
     if x < C["PIPE_MIN_X"] or x >= 256:
         return 0
     col = x // 8                       # floor
@@ -107,15 +116,24 @@ def model_pipe(x, gt, screen):
     cov = 0
     if ovl:
         cov = (1 if lo <= C["BIRD_COL"] else 0) | (2 if hi >= C["BIRD_COL"] + 1 else 0)
+    full = col >= 0 and col + 4 <= 31
     for r in range(C["PLAY_TOP"], C["PLAY_BOT"]):
         pat = pattern_for_row(r, gt)
         if pat is None and not ovl:
             continue
         for c in range(lo, hi + 1):
+            if pat is None:
+                screen[r * 32 + c] = bg_byte(bg, r, c)         # gap row under the bird: restore
+                continue
             b = 0
+            keep = full and r >= BG_Y
+            under = bg_byte(bg, r, c)
             for bit in range(8):
                 px = c * 8 + bit - x
-                if pat is not None and 0 <= px < 24 and pat[px]:
+                if 0 <= px < 24:
+                    if pat[px]:
+                        b |= 0x80 >> bit
+                elif keep and under & (0x80 >> bit):
                     b |= 0x80 >> bit
             screen[r * 32 + c] = b
     return cov
@@ -190,6 +208,8 @@ def build_cases():
                      (2, 0, 6, 0), (2, 0, 6, 7), (2, 1, 3, 123), (2, 2, 4, 999), (2, 3, 4, 1000), (2, 4, 30, 456),
                      (2, 5, 31, 12), (1, 6, 0, "s_ready2"), (1, 7, 0, "s_again"), (1, 8, 0, "s_over"),
                      (1, 9, 0, "s_new"), (1, 10, 0, "s_menu"), (1, 11, 0, "s_keys")]
+    cases["pipebg"] = [(x & 0xFFFF, g) for x in (-30, -9, -8, 0, 3, 8, 40, 56, 63, 64, 72, 77, 100, 183, 216, 220, 224, 231, 240, 250)
+                       for g in (40, 66, 92)]
     cases["step"] = [(y << 8 | f, vy & 0xFFFF, lv, bird) for y in (16, 100, 159, 160)
                      for f in (0, 0xFF) for vy in (0, 0x28, -0x300, 0x3FF, 0x400, 0x500, 0x5FF, 0x600, 0x700, -0x100, -0x2F0)
                      for lv in range(len(GRAV)) for bird in range(len(BIRD_DG))]
@@ -216,6 +236,7 @@ def write_cases(cases):
     table("spr_cases", cases["spr"], lambda e: "defb %d,%d,%d" % e)
     table("text_cases", cases["text"],
           lambda e: "defb %d,%d,%d\n        defw %s" % (e[0], e[1], e[2], e[3]))
+    table("pipebg_cases", cases["pipebg"], lambda e: "defb %d,%d,%d" % (e[0] & 255, e[0] >> 8, e[1]))
     table("step_cases", cases["step"], lambda e: "defw %d,%d,%d,%d" % e)
     table("coll_cases", cases["coll"], lambda e: "defb %d,%d,%d,%d" % (e[0] & 255, e[0] >> 8, e[1], e[2]))
     table("score_cases", cases["score"], lambda e: "defb %d,%d,%d\n        defw %d" % (e[0] & 255, e[0] >> 8, e[1], e[2]))
@@ -271,6 +292,18 @@ def unit_tests():
         if got != (cov, s1, s2):
             bad.append((s16(x16), gt, got, (cov, s1, s2)))
     check(not bad, "draw_pipe == pixel model for %d cases (first bad: %s)" % (len(cases["pipe"]), bad[:2]))
+
+    bgl = [(0x33 + 5 * i) & 0xFF for i in range(3 * G.BG_ROWS * 32)]
+    r = rd(mem, sym["res_pipebg"], len(cases["pipebg"]) * 5)
+    bad = []
+    for i, (x16, gt) in enumerate(cases["pipebg"]):
+        scr = bytearray([0xFF]) * 6144
+        cov = model_pipe(s16(x16), gt, scr, bgl)
+        s1, s2 = checksum(scr)
+        got = (r[5 * i], u16(r, 5 * i + 1), u16(r, 5 * i + 3))
+        if got != (cov, s1, s2):
+            bad.append((s16(x16), gt, got, (cov, s1, s2)))
+    check(not bad, "draw_pipe over the parallax band == model for %d cases (first bad: %s)" % (len(cases["pipebg"]), bad[:2]))
 
     r = rd(mem, sym["res_spr"], len(cases["spr"]) * 4)
     bad = []
@@ -339,6 +372,24 @@ def unit_tests():
         check(xs == want and all(40 <= r[12 * (lv // 2) + 4 * i + 2] <= 92 and r[12 * (lv // 2) + 4 * i + 3] == 0 for i in range(3)),
               "pipes_reset level %d places pipes %s (want %s) with legal gaps" % (lv, xs, want))
 
+    # parallax: layers rotate one pixel left per update and are copied to their screen rows
+    def rot(layer, n):
+        out = []
+        for y in range(G.BG_ROWS):
+            v = int.from_bytes(bytes(layer[y * 32:y * 32 + 32]), "big")
+            for _ in range(n):
+                v = ((v << 1) | (v >> 255)) & ((1 << 256) - 1)
+            out += list(v.to_bytes(32, "big"))
+        return out
+    art = [G._layer(fn) for _, fn in G.BG_LAYERS]
+    want = [rot(art[0], 1), rot(art[1], 1), rot(art[2], 4)]
+    n = G.BG_ROWS * 32
+    r = rd(mem, sym["res_bg"], 3 * n)
+    got = [list(r[i * n:(i + 1) * n]) for i in range(3)]
+    check(got == want, "parallax layers rotate: city x1, forest x1, field x4 (bg_rot / bg_step phases)")
+    rs = rd(mem, sym["res_bgscr"], 3 * n)
+    shown = [list(rs[i * n:(i + 1) * n]) for i in range(3)]
+    check(shown == want, "parallax layers are blitted to rows 140, 152, 164")
     check(u16(mem, sym["res_bc"]) == 0x1234, "wait_vsync preserves BC (res_bc=%#x)" % u16(mem, sym["res_bc"]))
 
     # the whole image stays below the second screen page

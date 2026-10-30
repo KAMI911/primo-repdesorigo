@@ -10,6 +10,44 @@ t_start:
         ld      hl,VRAM_MONO
         ld      (v_scr),hl
 
+; ---- parallax: bg_rot x3 on the field, then bg_step for v_anim 6 (city), 2 (forest), 7 (nothing), 4 (field)
+        ld      b,3
+tbg_rot:push    bc
+        ld      hl,bg_near
+        call    bg_rot
+        pop     bc
+        djnz    tbg_rot
+        ld      hl,bg_near
+        ld      a,BG_Y_NEAR
+        call    bg_blit
+        ld      b,4
+tbg_stp:push    bc
+        ld      a,b
+        ld      hl,tbg_anim - 1
+        ld      e,a
+        ld      d,0
+        add     hl,de
+        ld      a,(hl)
+        ld      (v_anim),a
+        call    bg_step
+        pop     bc
+        djnz    tbg_stp
+        ld      hl,bg_far
+        ld      de,res_bg
+        ld      bc,3 * BG_ROWS * 32
+        ldir
+        ld      hl,VRAM_MONO + BG_Y_FAR * 32    ; what the blits put on the screen
+        ld      de,res_bgscr
+        ld      bc,3 * BG_ROWS * 32
+        ldir
+        ld      hl,bg_far               ; from here on the layers are blank: the other tests see a plain screen
+        ld      bc,3 * BG_ROWS * 32
+        xor     a
+        call    memfill
+        xor     a
+        call    fill_screen
+
+
 ; ---- row_addr for all 192 rows
         ld      hl,res_rows
         ld      (t_rp),hl
@@ -114,6 +152,48 @@ tpc_loop:ld      hl,(t_n)
         call    store_checksum
         jr      tpc_loop
 tpc_done:
+
+; ---- draw_pipe over a parallax background: layers = 0x33 + 5*i, screen prefilled 0xFF
+        ld      hl,bg_far
+        ld      bc,3 * BG_ROWS * 32
+        ld      a,0x33
+tpb_fill:ld     (hl),a
+        add     a,5
+        inc     hl
+        dec     bc
+        push    af
+        ld      a,b
+        or      c
+        jr      z,tpb_fd
+        pop     af
+        jr      tpb_fill
+tpb_fd: pop     af
+        ld      hl,pipebg_cases
+        ld      de,res_pipebg
+        call    case_begin
+tpb_loop:ld     hl,(t_n)
+        ld      a,h
+        or      l
+        jr      z,tpb_done
+        dec     hl
+        ld      (t_n),hl
+        ld      a,0xFF
+        call    fill_screen
+        call    setup_far
+        ld      hl,(t_cp)
+        ld      de,v_pipes
+        ld      bc,3
+        ldir
+        ld      (t_cp),hl
+        xor     a
+        ld      (v_cov),a
+        ld      ix,v_pipes
+        call    draw_pipe
+        ld      a,(v_cov)
+        call    store_byte
+        call    store_checksum
+        jr      tpb_loop
+tpb_done:
 
 ; ---- draw_sprite: screen prefilled 0x5A; cases (sprite index, row, column)
         ld      hl,spr_cases
@@ -331,6 +411,7 @@ tps_done:
         ld      (res_bc),bc
 
 t_done: halt
+tbg_anim: defb  4,7,2,6                 ; indexed by the countdown 4..1, so it runs 6 (city), 2 (forest), 7 (none), 4 (field)
 
 ; ---------------------------------------------------------------- helpers ---
 ; case_begin  HL = table (count word, then entries), DE = result buffer.
@@ -432,6 +513,7 @@ res_period: defw 0
 res_gap:    defs 256
 res_dec:    defs 1101 * 3
 res_pipe:   defs 1024 * 5
+res_pipebg: defs 128 * 5
 res_spr:    defs 256 * 4
 res_text:   defs 64 * 4
 res_step:   defs 1100 * 4
@@ -440,3 +522,5 @@ res_score:  defs 256 * 4
 res_pstep:  defs 256 * 4
 res_reset:  defs 2 * N_PIPES * PIPE_SZ
 res_bc:     defw 0
+res_bg:     defs 3 * BG_ROWS * 32
+res_bgscr:  defs 3 * BG_ROWS * 32
