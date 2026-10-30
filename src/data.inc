@@ -167,6 +167,8 @@ s_lvl2:
         defb    $2D,$24,$FF
 s_start:
         defb    $1D,$1A,$0B,$0D,$0F,$26,$00,$13,$18,$0E,$2E,$1E,$2C,$1D,$FF
+s_colkey:
+        defb    $0D,$26,$00,$1D,$24,$2E,$18,$0F,$1D,$28,$17,$19,$18,$19,$FF
 s_best:
         defb    $1C,$0F,$15,$19,$1C,$0E,$26,$FF
 s_ready1:

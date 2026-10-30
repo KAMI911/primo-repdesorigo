@@ -106,7 +106,7 @@ cr_loop:
         djnz    cr_loop
         ret
 
-; clear_screen  A = 1 colour / 0 mono. Clobbers AF,BC,DE,HL. Mono: pixels only. Colour: as Raktáros, wipes
+; clear_screen  A = 1 colour / 0 mono (v_mono = 1 on a colour model: wipe only, colour stays off). Clobbers AF,BC,DE,HL. Mono: pixels only. Colour: as Raktáros, wipes
 ; control, palette, colour RAM and pixels, then programs the palette (colour_setup).
 clear_screen:
         or      a
@@ -120,6 +120,9 @@ clear_color:
         ld      bc,VRAM_CTRL_SZ
         xor     a
         call    memfill
+        ld      a,(v_mono)
+        or      a
+        ret     nz                      ; colour switched off (control $E001 = 0), mono picture at $E800
         jp      colour_setup
 
 ; colour_setup (colour model only): palette entries 0..15 = pixel 0 colour, 16..31 = pixel 1 colour, picked by
@@ -159,7 +162,7 @@ cs_put: ld      a,e
         jr      nz,cs_bank
         ld      a,0x81
         ld      (COL_CTRL),a
-        ld      hl,COL_RAM + 44 * 32    ; ground = pixel rows 176..191 = colour rows 44..47
+        ld      hl,COL_RAM + (COLOR_TOP / 4 + 44) * 32  ; ground = game rows 176..191 = colour rows 46..49
         ld      bc,4 * 32
         ld      a,0x11
         jp      memfill
@@ -258,6 +261,12 @@ ELSE
         rlca
         rlca
         rlca
+        or      d
+        ld      d,a                     ; bit 3 = ESC
+        ld      a,KEY_C
+        call    rd_key
+        and     1
+        rrca                            ; bit 7 = C (colour / yellow mono)
         or      d
         ret
 

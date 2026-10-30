@@ -24,6 +24,7 @@ A gyorsabb szinteken a gravitáció és a végsebesség is nagyobb (`grav_tab`, 
 | SPACE / ↑ / RETURN | szárnycsapás (a menüben: indítás) |
 | ← / → | madár választása a menüben |
 | ESC | játék után vissza a menübe |
+| C | menüben, csak színes gépen: színes ↔ monokróm mód (a színes vezérlés kikapcsol, mint az A/B gépen) |
 
 Pontot kapsz minden cső mögött, amin átrepülsz; a REKORD a gép kikapcsolásáig megmarad.
 A betűkészlet csupa nagybetűs, az ékezetek (Á É Í Ó Ö Ő Ú Ü Ű) a betűk fölötti pixelsorban vannak.

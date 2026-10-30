@@ -359,7 +359,7 @@ def screen_image(mem, base=VRAM):
     return img
 
 
-def headless(defs, bird=0, frames=400, bot=1, seed=0xACE1, tag="head", level=0):
+def headless(defs, bird=0, frames=400, bot=1, seed=0xACE1, tag="head", level=0, mono=0):
     out = "%s/%s.bin" % (BUILD, tag)
     sym = assemble("src/main.asm", out, ["HEADLESS", "NOHW"] + list(defs))
     data = bytearray(open(out, "rb").read())
@@ -369,6 +369,7 @@ def headless(defs, bird=0, frames=400, bot=1, seed=0xACE1, tag="head", level=0):
         data[a:a + n] = val.to_bytes(n, "little")
     poke("headless_bird", bird)
     poke("headless_level", level)
+    poke("headless_mono", mono)
     poke("headless_bot", bot)
     poke("headless_frames", frames, 2)
     poke("headless_seed", seed, 2)
@@ -419,15 +420,21 @@ def gameplay(shots):
             screen_image(r["mem"]).resize((768, 576)).save(os.path.join(shots, "menu%d.png" % bird))
         r = headless(["SHOT_READY"], tag="ready")
         screen_image(r["mem"]).resize((768, 576)).save(os.path.join(shots, "ready.png"))
-    # colour build: palette programmed, pixels still at $E700, bird plays the same
+    # colour build: palette programmed, pixels start at $E800 (colour picture origin + 8 lines), bird plays the same
     r = headless(["TARGET_COLOR"], frames=300, tag="colour")
     m = r["mem"]
     check(m[0xE001] == 0x81 and r["frames"] == 300 and r["score"] >= 1, "colour build runs (control byte %#x, score %d)" % (m[0xE001], r["score"]))
     check(m[0xE020] == 0xF4 and m[0xE030] == 0x00 and m[0xE021] == 0x77 and m[0xE031] == 0x03,
           "colour palette: sky/white, ground brown/yellow, stored inverted")
-    check(all(m[0xE080 + 44 * 32 + i] == 0x11 for i in range(128)) and m[0xE080] == 0, "colour RAM: ground cells use palette group 1")
+    check(all(m[0xE080 + 46 * 32 + i] == 0x11 for i in range(128)) and m[0xE080] == 0, "colour RAM: ground cells use palette group 1")
+    # colour model, colour switched off (C in the menu): control area wiped ($E001 = 0, no palette, no colour RAM),
+    # the picture is the plain mono one at $E800
+    r = headless(["TARGET_COLOR"], frames=300, tag="mono_on_colour", mono=1)
+    m = r["mem"]
+    check(not any(m[0xE000:0xE700]) and r["frames"] == 300 and r["score"] >= 1 and any(m[0xE800:0xF800]),
+          "colour off: control area zero (control %#x), game runs on the $E800 picture (score %d)" % (m[0xE001], r["score"]))
     if shots:
-        screen_image(m, 0xE700).resize((768, 576)).save(os.path.join(shots, "play_colour_pixels.png"))
+        screen_image(m, 0xE800).resize((768, 576)).save(os.path.join(shots, "play_colour_pixels.png"))
 
 
 def scripted(script, tag):

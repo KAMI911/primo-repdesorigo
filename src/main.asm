@@ -23,7 +23,7 @@ start:
 st_dflt:ld      hl,VRAM_MONO
         jr      st_scr
 st_color:
-        ld      hl,VRAM_COLOR
+        ld      hl,VRAM_COLOR + COLOR_TOP * 32
 st_scr: ld      (v_scr),hl
 IF HEADLESS
         ld      hl,(headless_seed)
@@ -40,6 +40,8 @@ IF HEADLESS
         ld      (v_bird),a
         ld      a,(headless_level)
         ld      (v_level),a
+        ld      a,(headless_mono)
+        ld      (v_mono),a
 IF SHOT_MENU
         call    menu_screen
         jp      done
@@ -56,6 +58,7 @@ IF HEADLESS
 done:   halt
 headless_bird:   defb 0
 headless_level:  defb 0
+headless_mono:   defb 0
 headless_bot:    defb 1
 headless_frames: defw 400
 headless_seed:   defw 0xACE1
@@ -90,6 +93,13 @@ menu_screen:
         ld      hl,s_start
         ld      b,21
         call    draw_text_center
+        ld      a,(v_color)
+        or      a
+        jr      z,ms_nocol
+        ld      hl,s_colkey
+        ld      b,20
+        call    draw_text_center
+ms_nocol:
         call    menu_level
         xor     a
         ld      (v_anim),a
@@ -164,7 +174,17 @@ mn_lvset:
         ld      (v_level),a
         call    menu_level
         jr      mn_loop
-mn_left:bit     1,c
+mn_left:bit     7,c                     ; C: colour on / off (colour model only)
+        jr      z,mn_bird
+        ld      a,(v_color)
+        or      a
+        jr      z,mn_bird
+        ld      a,(v_mono)
+        xor     1
+        ld      (v_mono),a
+        call    menu_screen             ; redraws everything with the new palette
+        jr      mn_loop
+mn_bird:bit     1,c
         jr      z,mn_right
         ld      a,(v_bird)
         or      a

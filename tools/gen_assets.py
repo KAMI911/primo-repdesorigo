@@ -188,6 +188,7 @@ STRINGS = {
     "s_lvl1": "SZÁRNYPRÓBA - KÖZEPES",
     "s_lvl2": "LEVEGŐ URA - NEHÉZ",
     "s_start": "SPACE: INDÍTÁS",
+    "s_colkey": "C: SZÍNES-MONO",
     "s_best": "REKORD:",
     "s_ready1": "KÉSZÜLJ!",
     "s_ready2": "SPACE: REPÜLÉS",

@@ -13,6 +13,7 @@ defc VRAM_MONO    = 0xE800      ; 256x192, 32 bytes/line, 6144 bytes (48K/64K mo
 defc VRAM_MONO_SZ = 0x1800
 defc VRAM_CTRL    = 0xE000      ; colour model: control, palette ($E020), colour RAM ($E080)
 defc VRAM_COLOR   = 0xE700      ; colour model pixels: 256x200 = 6400 bytes up to $FFFF
+defc COLOR_TOP    = 8           ; the game's 192 lines start this many lines down (origin = mono $E800, as zsugabubus)
 defc VRAM_CTRL_SZ = 0x2000
 
 ; Keyboard scan codes (IN A,(code); bit 0 = 1 -> pressed). Source: Primo Füzetek Hardver 5.4 / z88dk in_keytranstbl.
@@ -23,6 +24,7 @@ defc KEY_RETURN   = 0x37
 defc KEY_LEFT     = 0x39
 defc KEY_RIGHT    = 0x3D
 defc KEY_ESC      = 0x3F
+defc KEY_C        = 0x10
 
 ; Colour model set-up (zsugabubus/src/hw_color.c, verified there against Raktáros): control $E001 = 0x81
 ; (colour on, palette bank 1); palette banks at $E020/$E040/$E060, 32 colour bytes each (RRRGGGBB, stored

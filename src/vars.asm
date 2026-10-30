@@ -2,6 +2,7 @@
 ; The image carries them as zeros; start-up code (re)initialises what it needs.
 v_scr:      defw    0                   ; screen base: $E800 mono, $E700 colour (low byte always 0)
 v_color:    defb    0
+v_mono:     defb    0                   ; colour model only: 1 = colour off, plain mono picture (C in the menu)
 v_bird:     defb    0                   ; selected bird 0..N_BIRDS-1
 v_y:        defw    0                   ; bird top row, 8.8 fixed point (high byte = pixel row)
 v_vy:       defw    0                   ; signed 8.8 pixels/frame
