@@ -478,6 +478,28 @@ def gameplay(shots):
     check(m[0xE020] == 0xF4 and m[0xE030] == 0x00 and m[0xE021] == 0x77 and m[0xE031] == 0x03,
           "colour palette: sky/white, ground brown/yellow, stored inverted")
     check(all(m[0xE080 + 46 * 32 + i] == 0x11 for i in range(128)) and m[0xE080] == 0, "colour RAM: ground cells use palette group 1")
+    # pipes keep white ink over the parallax band: cells under a pipe's 24 px footprint have nibble 0, all others
+    # their layer's nibble (2 city, 3 forest, 4 field; three colour rows each, starting at colour row 37)
+    pipes = [(s16(m[r["sym"]["v_pipes"] + 4 * i] | m[r["sym"]["v_pipes"] + 4 * i + 1] << 8)) for i in range(C["N_PIPES"])]
+    bad = []
+    for cr in range(9):
+        layer = 2 + cr // 3
+        for b in range(32):
+            want = 0
+            for half in (0, 1):
+                s = b * 8 + half * 4
+                hit = any(-32 <= px < 256 and s + 3 >= px and s <= px + 23 for px in pipes)
+                want |= 0 if hit else layer << (4 if half == 0 else 0)
+            got = m[0xE080 + (37 + cr) * 32 + b]
+            if got != want:
+                bad.append((cr, b, got, want))
+    check(not bad, "colour RAM: pipes (x=%s) recolour the band cells under them (bad: %s)" % (pipes, bad[:3]))
+    # colour menu: two-tone letters (upper 4 lines nibble 0, lower 4 lines nibble 5) on all 24 text rows
+    r2 = headless(["SHOT_MENU", "TARGET_COLOR"], tag="menu_colour")
+    m2 = r2["mem"]
+    check(all(m2[0xE080 + (2 + 2 * t) * 32 + b] == 0x00 and m2[0xE080 + (3 + 2 * t) * 32 + b] == 0x55
+              for t in range(24) for b in range(32)) and m2[0xE001] == 0x81,
+          "colour menu: every text row has white upper / yellow lower letter halves")
     # colour model, colour switched off (C in the menu): control area wiped ($E001 = 0, no palette, no colour RAM),
     # the picture is the plain mono one at $E800
     r = headless(["TARGET_COLOR"], frames=300, tag="mono_on_colour", mono=1)

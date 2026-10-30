@@ -271,6 +271,9 @@ render_pipes:
         ld      b,N_PIPES
 rp_loop:push    bc
         call    draw_pipe
+        ld      a,(v_pcol)
+        or      a
+        call    nz,pipe_colour
         pop     bc
         ld      de,PIPE_SZ
         add     ix,de

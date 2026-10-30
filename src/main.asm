@@ -100,6 +100,13 @@ menu_screen:
         ld      b,4
         call    draw_text_center
 ms_nocol:
+        ld      a,(v_color)
+        or      a
+        jr      z,ms_mono
+        ld      a,(v_mono)
+        or      a
+        call    z,menu_colour           ; two-tone letters on the colour model
+ms_mono:
         call    menu_level
         xor     a
         ld      (v_anim),a
@@ -304,6 +311,11 @@ play:
         call    clear_screen
         call    draw_ground
         call    bg_draw_all
+        ld      a,(v_mono)              ; pipes recolour the band cells only when colour is on
+        xor     1
+        ld      hl,v_color
+        and     (hl)
+        ld      (v_pcol),a
         call    pipes_reset
         ld      hl,BIRD_Y0 * 256
         ld      (v_y),hl

@@ -34,6 +34,10 @@ v_pb:       defw    0
 v_src:      defw    0
 v_n16:      defw    0
 v_adj:      defb    0
+v_pcol:     defb    0                   ; 1 = colour model with colour on: pipes recolour the band cells under them
+v_px:       defw    0                   ; pipe_colour scratch
+v_pc:       defb    0
+v_pn:       defb    0
 v_full:     defb    0                   ; draw_pipe: window is complete (5 bytes, unclipped)
 v_q:        defb    0                   ; seg: rows left inside the parallax band
 v_rows:     defb    0

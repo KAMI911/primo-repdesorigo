@@ -62,6 +62,10 @@ egy réteg lép: a mező 4., az erdő 8., a város 16. kockánként (¼, ⅛, 1�
 úszik: ahol a cső ablaka teljes (5 bájt, nincs képernyőszélen), a cső 24 pixeles lábnyomán kívül a háttér látszik
 (`seg` a `gfx.asm`-ben), a madár törlése és a rés is visszaállítja a hátteret. Képernyő széléhez lógó cső ablakában a
 háttér még a régi módon nullázódik. A színes modellen a rétegek külön színt kapnak (szürkéskék / sötétzöld / világoszöld).
+A színes RAM cellái 4×4 pixelesek, ezért a rétegek színe a csöveket is átfestené: a cső 24 pixeles lábnyoma alatti
+cellák ezért fehér tintát (0-s paletta-csoport) kapnak, a cső ablakának többi cellája visszakapja a rétege színét
+(`pipe_colour` a `lib.asm`-ben). A színes menüben minden szövegsor betűinek felső 4 pixelsora fehér, az alsó 4 sárga
+(`menu_colour`, 5-ös paletta-csoport).
 
 Játékmenet: 256×192 pixel, a felső 16 sor a HUD, alul 16 sor föld. A csövek 2 pixelt lépnek játékkockánként,
 25 játékkocka/s (két képváltásonként egy). A rajzolás lépésenként csak a mozgó csöveket és a madarat frissíti.
