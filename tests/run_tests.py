@@ -467,7 +467,7 @@ def real_flow():
     r = scripted([0, 0, F, 0, 0, F] + [0] * 70 + [F, 0, 0, 0], "flow5")
     check(r["y"] == 88, "game over: SPACE starts a new game (bird row %d, 160 would mean it stayed on the game-over screen)" % r["y"])
     r = scripted([0, 0, F, 0, 0, F] + [0] * 70 + [8, 0, 0, 0], "flow6")
-    check(r["anim"] < 10, "game over: ESC returns to the menu (frame counter restarted: %d)" % r["anim"])
+    check(r["anim"] < 10, "game over: M returns to the menu (frame counter restarted: %d)" % r["anim"])
     r = scripted([0, 0, D, 0, D, 0, F, 0, 0, F, 0, 0], "flow7")
     check(r["level"] == 2 and r["speed"] == 4, "menu: DOWN twice selects the hardest level, speed 4 (level %d, speed %d)" % (r["level"], r["speed"]))
     r = scripted([0, 0, U, 0, F, 0, 0, F, 0, 0], "flow8")

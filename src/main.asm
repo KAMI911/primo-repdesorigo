@@ -1,7 +1,7 @@
 ; Repdeső Rigó -- Flappy Bird for the Primo (Z80). Builds as universal (runtime colour/mono detect),
 ; -DTARGET_BW or -DTARGET_COLOR. -DHEADLESS builds a test version for z88dk-ticks (no menu, autopilot).
 ;
-; Controls: SPACE / UP / RETURN = flap; LEFT / RIGHT = choose bird; ESC = back to the menu after a game.
+; Controls: SPACE / UP / RETURN = flap; LEFT / RIGHT = choose bird; M = back to the menu after a game.
 ; The ROM's 20 ms NMI is left running (we need no cycle-exact code); port 0 is only touched by `beep`,
 ; which restores the shadow value.
         include "hw.inc"
@@ -82,7 +82,7 @@ menu_screen:
         ld      b,2
         call    draw_text_center
         ld      hl,s_choose
-        ld      b,5
+        ld      b,6
         call    draw_text_center
         ld      hl,s_keys
         ld      b,17
@@ -97,7 +97,7 @@ menu_screen:
         or      a
         jr      z,ms_nocol
         ld      hl,s_colkey
-        ld      b,20
+        ld      b,4
         call    draw_text_center
 ms_nocol:
         call    menu_level
@@ -142,7 +142,7 @@ menu_level:
         ld      bc,23 * 256 + 10
         call    draw_text
         ld      hl,(v_best)
-        ld      bc,23 * 256 + 18
+        ld      bc,23 * 256 + 19        ; label + 2 spaces + 3 digits = 12 columns: exactly centred
         jp      draw_num3
 
 menu:
@@ -443,7 +443,7 @@ pl_key: call    wait_vsync
         jr      nz,pl_again
         bit     3,a
         jr      z,pl_key
-        xor     a                       ; ESC: back to the menu
+        xor     a                       ; M: back to the menu
         ret
 pl_again:
         ld      a,1

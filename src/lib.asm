@@ -188,7 +188,7 @@ bp_dly: dec     e
         ret
 ENDIF
 
-; read_keys -> A: bit0 = flap (SPACE, UP or RETURN), bit1 = LEFT, bit2 = RIGHT, bit3 = ESC, bit4 = UP, bit5 = DOWN,
+; read_keys -> A: bit0 = flap (SPACE, UP or RETURN), bit1 = LEFT, bit2 = RIGHT, bit3 = M, bit4 = UP, bit5 = DOWN,
 ; bit6 = start (SPACE or RETURN). Clobbers BCD.
 ; Scan: IN A,(code), bit 0 = 1 -> pressed. Headless builds use the autopilot instead (see game.asm).
 read_keys:
@@ -255,14 +255,14 @@ ELSE
         rlca
         or      d
         ld      d,a
-        ld      a,KEY_ESC
+        ld      a,KEY_M
         call    rd_key
         and     1
         rlca
         rlca
         rlca
         or      d
-        ld      d,a                     ; bit 3 = ESC
+        ld      d,a                     ; bit 3 = M
         ld      a,KEY_C
         call    rd_key
         and     1

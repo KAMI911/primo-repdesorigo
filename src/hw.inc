@@ -23,7 +23,7 @@ defc KEY_SPACE    = 0x19
 defc KEY_RETURN   = 0x37
 defc KEY_LEFT     = 0x39
 defc KEY_RIGHT    = 0x3D
-defc KEY_ESC      = 0x3F
+defc KEY_M        = 0x2C
 defc KEY_C        = 0x10
 
 ; Colour model set-up (zsugabubus/src/hw_color.c, verified there against Raktáros): control $E001 = 0x81

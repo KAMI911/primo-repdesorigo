@@ -194,7 +194,7 @@ STRINGS = {
     "s_ready2": "SPACE: REPÜLÉS",
     "s_over": "VÉGE A JÁTÉKNAK",
     "s_again": "SPACE: ÚJRA",
-    "s_menu": "ESC: MENÜ",
+    "s_menu": "M: MENÜ",
     "s_score": "PONT:",
     "s_new": "ÚJ REKORD!",
 }

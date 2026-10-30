@@ -180,7 +180,7 @@ s_over:
 s_again:
         defb    $1D,$1A,$0B,$0D,$0F,$26,$00,$30,$14,$1C,$0B,$FF
 s_menu:
-        defb    $0F,$1D,$0D,$26,$00,$17,$0F,$18,$32,$FF
+        defb    $17,$26,$00,$17,$0F,$18,$32,$FF
 s_score:
         defb    $1A,$19,$18,$1E,$26,$FF
 s_new:

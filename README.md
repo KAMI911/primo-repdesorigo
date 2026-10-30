@@ -23,7 +23,7 @@ A gyorsabb szinteken a gravitáció és a végsebesség is nagyobb (`grav_tab`, 
 |---|---|
 | SPACE / ↑ / RETURN | szárnycsapás (a menüben: indítás) |
 | ← / → | madár választása a menüben |
-| ESC | játék után vissza a menübe |
+| M | játék után vissza a menübe |
 | C | menüben, csak színes gépen: színes ↔ monokróm mód (a színes vezérlés kikapcsol, mint az A/B gépen) |
 
 Pontot kapsz minden cső mögött, amin átrepülsz; a REKORD a gép kikapcsolásáig megmarad.
@@ -71,7 +71,7 @@ Lefutott (`make test`):
 
 **Nem futott** Primón vagy Primo-emulátoron. A ROM-ot, a valódi videóhardvert, a billentyűzetet, a hangot és a
 szalagbetöltőt a fejlesztői környezet nem látja. Első indításkor érdemes ellenőrizni: betöltés `.wav`-ból,
-mindkét modellen indul-e, a billentyűk (SPACE, ←, →, ESC), a hang és a villogásmentes rajzolás.
+mindkét modellen indul-e, a billentyűk (SPACE, ←, →, M), a hang és a villogásmentes rajzolás.
 Bizonytalan (hardver-dokumentáció alapján, nem mért) pontok:
 - a színes modell palettája és a színes RAM kiosztása a `zsugabubus` projekt `hw_color.c` fájlján alapul;
 - a hangot a `$403B` árnyékregiszter értékéből a D4 bit billegtetésével adjuk (az NMI nincs letiltva, ezért kattanhat);
