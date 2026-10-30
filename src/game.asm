@@ -26,6 +26,18 @@ gm_ok:  add     a,a
         add     a,GT_MIN
         ret
 
+; theme_next  A = any byte -> A = the next theme: v_theme + 1 or + 2 (mod N_THEMES, picked by bit 0 of A), never the
+; same one twice in a row. Clobbers HL,F.
+theme_next:
+        and     1
+        inc     a
+        ld      hl,v_theme
+        add     a,(hl)
+        cp      N_THEMES
+        ret     c
+        sub     N_THEMES
+        ret
+
 ; gap_roll -> A = a fresh random gap top. Clobbers HL,F.
 gap_roll:
         call    rand8

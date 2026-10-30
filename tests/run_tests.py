@@ -378,6 +378,11 @@ def unit_tests():
         check(xs == want and all(r[12 * (lv // 2) + 4 * i + 2] in GT_VALUES and r[12 * (lv // 2) + 4 * i + 3] == 0 for i in range(3)),
               "pipes_reset level %d places pipes %s (want %s) with legal gaps" % (lv, xs, want))
 
+    tn = list(rd(mem, sym["res_tn"], 12))
+    want = [(prev + 1 + (b & 1)) % 3 for prev in range(3) for b in range(4)]
+    check(tn == want and all(tn[4 * p + i] != p for p in range(3) for i in range(4)),
+          "theme_next never repeats the previous theme and uses both others: %s" % tn)
+
     pk = [u16(rd(mem, sym["res_pick"], 8), 2 * i) for i in range(4)]
     check(pk == [sym["bg_t0"], sym["bg_t1"], sym["bg_t2"], sym["bg_t0"]], "bg_pick selects themes 0, 1, 2 (9 -> 0): %s" % [hex(v) for v in pk])
     # parallax: layers rotate one pixel left per update and are copied to their screen rows

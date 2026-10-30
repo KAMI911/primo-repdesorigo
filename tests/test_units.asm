@@ -138,6 +138,27 @@ trn_nz:  ld      a,h
         jr      nz,trn_loop
         ld      (res_period),de
 
+; ---- theme_next for every previous theme with random bytes 0..3
+        ld      hl,res_tn
+        ld      d,0
+ttn_o:  ld      e,0
+ttn_i:  ld      a,d
+        ld      (v_theme),a
+        ld      a,e
+        push    hl
+        call    theme_next
+        pop     hl
+        ld      (hl),a
+        inc     hl
+        inc     e
+        ld      a,e
+        cp      4
+        jr      c,ttn_i
+        inc     d
+        ld      a,d
+        cp      N_THEMES
+        jr      c,ttn_o
+
 ; ---- gap_map over all 256 input bytes
         ld      hl,res_gap
         ld      b,0
@@ -560,6 +581,7 @@ res_rows:   defs 192 * 2
 res_zero:   defb 0
 res_period: defw 0
 res_gap:    defs 256
+res_tn:     defs 12
 res_dec:    defs 1101 * 3
 res_pipe:   defs 1024 * 5
 res_pipebg: defs 128 * 5

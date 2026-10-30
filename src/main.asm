@@ -311,10 +311,8 @@ play:
 IF HEADLESS
         ld      a,(headless_theme)
 ELSE
-pl_theme:call   rand8                   ; the theme of this game: city, forest or field, at random
-        and     3
-        cp      N_THEMES
-        jr      nc,pl_theme
+        call    rand8                   ; the theme of this game: city, forest or field, never the same as the last one
+        call    theme_next
 ENDIF
         call    bg_pick                 ; before clear_screen: the colour palette depends on it
         ld      a,(v_color)
