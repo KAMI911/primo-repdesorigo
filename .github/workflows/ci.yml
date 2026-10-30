@@ -1,0 +1,39 @@
+name: CI
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+permissions:
+  contents: read          # least privilege; the release job raises it for itself only
+jobs:
+  build-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4   # pin to a commit SHA once you have chosen a version
+      - run: pip install pillow     # only for `make shots`; tests themselves need just the standard library
+      - run: make test
+      - run: make
+      - run: make shots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repdesorigo-builds
+          path: |
+            build/*.ptp
+            build/*.wav
+            build/*.map
+            build/shots/*.png
+          if-no-files-found: error
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-test
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: repdesorigo-builds, path: dist }
+      - run: cd dist && sha256sum *.ptp *.wav > SHA256SUMS
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.ptp dist/*.wav dist/SHA256SUMS --repo "$GITHUB_REPOSITORY" --generate-notes
