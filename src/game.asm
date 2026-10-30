@@ -15,13 +15,15 @@ r8_nx:  ld      (v_rng),hl
         xor     l
         ret
 
-; gap_map  A = any byte -> A = gap top row in GT_MIN .. GT_MIN+GT_RANGE-1. Clobbers F.
+; gap_map  A = any byte -> A = gap top row: GT_MIN + GT_STEP * (0 .. GT_RANGE-1). Clobbers F.
 gap_map:
-        and     63
+        and     15
         cp      GT_RANGE
         jr      c,gm_ok
-        sub     GT_RANGE                ; 53..63 -> 0..10
-gm_ok:  add     a,GT_MIN
+        sub     GT_RANGE                ; 14, 15 -> 0, 1
+gm_ok:  add     a,a
+        add     a,a                     ; * GT_STEP
+        add     a,GT_MIN
         ret
 
 ; gap_roll -> A = a fresh random gap top. Clobbers HL,F.

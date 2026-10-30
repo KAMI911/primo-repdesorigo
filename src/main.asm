@@ -59,6 +59,7 @@ done:   halt
 headless_bird:   defb 0
 headless_level:  defb 0
 headless_mono:   defb 0
+headless_theme:  defb 0
 headless_bot:    defb 1
 headless_frames: defw 400
 headless_seed:   defw 0xACE1
@@ -307,6 +308,15 @@ md_next:pop     bc
 play:
         ld      a,(v_level)
         call    level_setup             ; speed and this level's best
+IF HEADLESS
+        ld      a,(headless_theme)
+ELSE
+pl_theme:call   rand8                   ; the theme of this game: city, forest or field, at random
+        and     3
+        cp      N_THEMES
+        jr      nc,pl_theme
+ENDIF
+        call    bg_pick                 ; before clear_screen: the colour palette depends on it
         ld      a,(v_color)
         call    clear_screen
         call    draw_ground

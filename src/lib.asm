@@ -126,22 +126,29 @@ clear_color:
         jp      colour_setup
 
 ; colour_setup (colour model only): palette entries 0..15 = pixel 0 colour, 16..31 = pixel 1 colour, picked by
-; the 4x4 cell nibble in colour RAM (see pal_tab). Nibble 0 = night sky / white ink (everything), 1 = brown /
-; yellow (ground), 2 / 3 / 4 = sky / grey, green, light green ink (city, forest, field layers), 5 = sky /
-; yellow (lower half of the menu letters). Palette bytes are
-; stored inverted in all three banks. Clobbers AF,BC,DE,HL.
+; the 4x4 cell nibble in colour RAM (see pal_tab, one table per parallax theme). Nibble 0 = night sky / white ink
+; (everything), 1 = brown / yellow (ground), 2 / 3 = sky / far and near layer ink of the theme, 5 = sky / yellow
+; (lower half of the menu letters). Palette bytes are stored inverted in all three banks. Clobbers AF,BC,DE,HL.
 defc PAL_SKY    = 0x0B                  ; RRRGGGBB dark blue
 defc PAL_WHITE  = 0xFF
 defc PAL_BROWN  = 0x88
 defc PAL_YELLOW = 0xFC
-defc PAL_CITY   = 0x6E                  ; grey-blue
-defc PAL_FOREST = 0x14                  ; dark green
-defc PAL_FIELD  = 0x7C                  ; light green
 colour_setup:
+        ld      a,(v_theme)
+        add     a,a
+        add     a,a
+        add     a,a
+        add     a,a
+        add     a,a                     ; * 32
+        ld      e,a
+        ld      d,0
+        ld      hl,pal_tab
+        add     hl,de
+        ld      (v_pt),hl
         ld      hl,COL_PAL1
         ld      c,3                     ; three banks of 32 bytes
 cs_bank:
-        ld      de,pal_tab
+        ld      de,(v_pt)
         ld      b,32
 cs_ent: ld      a,(de)
         cpl
@@ -153,28 +160,33 @@ cs_ent: ld      a,(de)
         jr      nz,cs_bank
         ld      a,0x81
         ld      (COL_CTRL),a
-        ld      hl,COL_RAM + (COLOR_TOP / 4 + BG_Y_FAR / 4) * 32   ; layer cells, then the ground right below
-        ld      bc,3 * 32
+        ld      hl,COL_RAM + BG_COLROW * 32     ; layer cells, then the ground right below
+        ld      bc,2 * 32
         ld      a,0x22
         call    memfill
         inc     hl                      ; memfill leaves HL on the last byte it wrote
-        ld      bc,3 * 32
+        ld      bc,2 * 32
         ld      a,0x33
-        call    memfill
-        inc     hl
-        ld      bc,3 * 32
-        ld      a,0x44
         call    memfill
         inc     hl
         ld      bc,4 * 32               ; ground = game rows 176..191 = colour rows 46..49
         ld      a,0x11
         jp      memfill
 
-; pal_tab: pixel 0 colours for nibble 0..15, then pixel 1 colours for nibble 0..15 (not inverted)
+; pal_tab: per theme (city, forest, field): pixel 0 colours for nibble 0..15, then pixel 1 colours for nibble 0..15
+; (not inverted). Ink 2 / 3 = far / near layer.
 pal_tab:
         defb    PAL_SKY,PAL_BROWN,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY
         defb    PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY
-        defb    PAL_WHITE,PAL_YELLOW,PAL_CITY,PAL_FOREST,PAL_FIELD,PAL_YELLOW,PAL_WHITE,PAL_WHITE
+        defb    PAL_WHITE,PAL_YELLOW,0x49,0xA5,PAL_WHITE,PAL_YELLOW,PAL_WHITE,PAL_WHITE      ; city: steel blue / brown
+        defb    PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE
+        defb    PAL_SKY,PAL_BROWN,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY
+        defb    PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY
+        defb    PAL_WHITE,PAL_YELLOW,0x10,0x1C,PAL_WHITE,PAL_YELLOW,PAL_WHITE,PAL_WHITE      ; forest: dark / bright green
+        defb    PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE
+        defb    PAL_SKY,PAL_BROWN,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY
+        defb    PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY
+        defb    PAL_WHITE,PAL_YELLOW,0x3C,0xB8,PAL_WHITE,PAL_YELLOW,PAL_WHITE,PAL_WHITE      ; field: green / olive
         defb    PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE
 
 ; menu_colour (colour model): every text row gets two-tone letters: the upper 4 pixel lines white (nibble 0), the lower
@@ -201,10 +213,11 @@ mc_row: push    bc
         djnz    mc_row
         ret
 
-; pipe_colour  IX = pipe (colour model, drawing over the parallax band): the colour cells of the band under the
-; pipe's 24 px footprint get nibble 0 (white ink), so the layer colour does not tint the pipe; the other cells of
-; its 5-byte window get their layer's nibble back. Same x range as draw_pipe. Clobbers all but IX.
-defc BG_COLROW  = COLOR_TOP / 4 + BG_Y_FAR / 4   ; first colour RAM row of the band (3 rows per layer)
+; pipe_colour  IX = pipe (colour model): the four colour rows of the parallax band (2 per layer; gap bottoms are at
+; most at row 152, so a window's band rows are always pipe) get nibble 0 (white ink) under the pipe's 24 px
+; footprint, so the layer colours do not tint the pipe; the other cells of its 5-byte window get their layer's
+; nibble back. Same x range as draw_pipe. Clobbers all but IX.
+defc BG_COLROW  = COLOR_TOP / 4 + BG_Y_FAR / 4   ; first colour RAM row of the band
 pipe_colour:
         ld      l,(ix+0)
         ld      h,(ix+1)
@@ -283,20 +296,8 @@ pb_w:   ld      hl,COL_RAM + BG_COLROW * 32
         add     hl,de
         ld      (hl),a
         add     hl,de
-        ld      (hl),a
-        add     hl,de
         ld      a,0x33
         and     b
-        ld      (hl),a
-        add     hl,de
-        ld      (hl),a
-        add     hl,de
-        ld      (hl),a
-        add     hl,de
-        ld      a,0x44
-        and     b
-        ld      (hl),a
-        add     hl,de
         ld      (hl),a
         add     hl,de
         ld      (hl),a

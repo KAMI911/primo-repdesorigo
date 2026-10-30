@@ -180,8 +180,10 @@ def pipe_table():
 GROUND = [0xFF, 0x00, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55]
 
 # ------------------------------------------------------- parallax layers -----
-BG_ROWS = 12                    # rows per layer; the three layers stack above the ground (rows 140..175)
-BG_W = 256                      # every layer is one 256 px wide strip that wraps around seamlessly
+# Three themes (city, forest, field), one picked at random per game. A theme = two 8-row layers, far then near, each
+# one 256 px wide strip that wraps around seamlessly. They sit right above the ground (rows 160..175, far on top).
+BG_ROWS = 8
+BG_W = 256
 
 
 def _layer(draw):
@@ -194,61 +196,131 @@ def _layer(draw):
     return [sum(px[y][8 * b + i] << (7 - i) for i in range(8)) for y in range(BG_ROWS) for b in range(BG_W // 8)]
 
 
-def _city(put):
-    r = random.Random(11)
-    x = 0
-    while x < BG_W:
-        w = r.choice((10, 14, 18, 22))
-        if BG_W - x < 28:
-            w = BG_W - x            # last building closes the loop exactly
-        h = r.randint(6, BG_ROWS)
-        for dx in range(w):
-            for dy in range(h):
-                edge = dy == h - 1 or dx in (0, w - 1)
-                win = dx % 4 == 2 and dy % 3 == 1 and 0 < dx < w - 1 and dy < h - 1
-                if edge or win:
-                    put(x + dx, BG_ROWS - 1 - dy)
+def _fill_widths(r, choices, minimum):
+    """Random widths that add up to exactly BG_W (the last one absorbs the remainder)."""
+    ws, x = [], 0
+    while BG_W - x >= minimum + max(choices):
+        w = r.choice(choices)
+        ws.append(w)
         x += w
+    ws.append(BG_W - x)
+    return ws
 
 
-def _forest(put):
+def _skyline(seed, heights):
+    def draw(put):
+        r = random.Random(seed)
+        x = 0
+        for w in _fill_widths(r, (10, 14, 18, 22), 10):
+            h = r.randint(*heights)
+            for dx in range(w):
+                for dy in range(h):
+                    edge = dy == h - 1 or dx in (0, w - 1)
+                    win = dx % 4 == 2 and dy % 3 == 1 and 0 < dx < w - 1 and dy < h - 1
+                    if edge or win:
+                        put(x + dx, BG_ROWS - 1 - dy)
+            x += w
+    return draw
+
+
+def _houses(put):
+    """Small houses with pitched roofs and street lamps; four identical 64 px units with random heights."""
+    r = random.Random(21)
+    for u in range(4):
+        x0 = u * 64
+        for hx, w in ((x0 + 2, 22), (x0 + 36, 18)):
+            h = r.randint(3, 4)
+            for dx in range(w):                         # walls and windows
+                for dy in range(h):
+                    if dy == 0 or dx in (0, w - 1) or (dx % 6 == 2 and dy == 2 and 0 < dx < w - 1):
+                        put(hx + dx, BG_ROWS - 1 - dy)
+            for t in range(3):                          # roof
+                for k in (0, 1):
+                    put(hx + t * 2 + k, BG_ROWS - 1 - h - t)
+                    put(hx + w - 1 - t * 2 - k, BG_ROWS - 1 - h - t)
+            for dx in range(6, w - 6):
+                put(hx + dx, BG_ROWS - 1 - h - 3)
+        lx = x0 + 28                                    # lamp between the houses
+        for dy in range(6):
+            put(lx, BG_ROWS - 1 - dy)
+        put(lx - 1, BG_ROWS - 7)
+        put(lx + 1, BG_ROWS - 7)
+        put(lx, BG_ROWS - 8)
+
+
+def _treeline(put):
+    """Far forest: a dense row of small pines."""
     r = random.Random(5)
     x = 0
-    while x < BG_W:
-        w = r.choice((10, 12, 14))
-        if BG_W - x < 16:
-            w = BG_W - x
-        h = r.randint(7, 10)
+    for w in _fill_widths(r, (8, 10, 12), 8):
+        h = r.randint(4, 6)
         mid = w // 2
-        top = BG_ROWS - 2 - h           # two trunk rows below the crown
+        top = BG_ROWS - 2 - h
         for t in range(h):
             half = (t * mid) // (h - 1)
             for dx in range(-half, half + 1):
                 if abs(dx) == half or (dx + t) % 2 == 0:
                     put(x + mid + dx, top + t)
-        for y in (BG_ROWS - 2, BG_ROWS - 1):
-            put(x + mid, y)
+        put(x + mid, BG_ROWS - 2)
+        put(x + mid, BG_ROWS - 1)
         x += w
 
 
-def _field(put):
+def _bigtrees(put):
+    """Near forest: round-crowned trees with trunks and a bush between each pair; four 64 px units."""
+    r = random.Random(9)
+    for u in range(4):
+        x0 = u * 64
+        for cx, rad in ((x0 + 14, 3), (x0 + 46, r.choice((2, 3)))):
+            cy = BG_ROWS - 1 - 2 - rad
+            for dx in range(-rad, rad + 1):
+                for dy in range(-rad, rad + 1):
+                    d2 = dx * dx + dy * dy
+                    if d2 <= rad * rad + 1 and (d2 > (rad - 1) ** 2 or (dx + dy) % 2 == 0):
+                        put(cx + dx, cy + dy)
+            for dy in range(2):
+                put(cx, BG_ROWS - 1 - dy)
+                put(cx + 1, BG_ROWS - 1 - dy)
+        for dx in range(-3, 4):                         # bush
+            for dy in range(2 - abs(dx) // 3):
+                put(x0 + 30 + dx, BG_ROWS - 1 - dy)
+
+
+def _hills(put):
+    """Far field: rolling hills (period 128 px), dotted below the crest."""
     for x in range(BG_W):
-        top = 4 + int(round(2.0 * math.sin(x * 2 * math.pi / 64) + 1.2 * math.sin(x * 2 * math.pi / 32 + 1)))
+        top = 3 + int(round(2.0 * math.sin(x * 2 * math.pi / 128) + 1.0 * math.sin(x * 2 * math.pi / 64 + 1)))
         put(x, top)
         for y in range(top + 1, BG_ROWS):
             if (x + 2 * y) % 5 == 0:
                 put(x, y)
-        if x % 3 == 0:
-            put(x, top - 1)
-    for fx in range(4, BG_W, 32):   # fence posts and rails
-        for y in range(BG_ROWS - 6, BG_ROWS):
+
+
+def _fence(put):
+    """Near field: a fence, tufts of tall grass and a few flowers."""
+    r = random.Random(3)
+    for x in range(BG_W):
+        put(x, BG_ROWS - 4)
+        put(x, BG_ROWS - 2)
+    for fx in range(4, BG_W, 16):
+        for y in range(BG_ROWS - 5, BG_ROWS):
             put(fx, y)
             put(fx + 1, y)
-    for x in range(BG_W):
-        put(x, BG_ROWS - 5)
+    for x in range(1, BG_W, 4):
+        for dy in range(r.randint(0, 1)):
+            put(x + r.randint(0, 1), BG_ROWS - 1 - dy)
+    for fx in range(10, BG_W, 40):
+        fy = r.randint(0, 1)
+        put(fx, fy)
+        put(fx - 1, fy + 1)
+        put(fx + 1, fy + 1)
+        put(fx, fy + 2)
+        put(fx, fy + 3)
 
 
-BG_LAYERS = (("bg_far", _city), ("bg_mid", _forest), ("bg_near", _field))
+THEMES = (("city", _skyline(11, (4, 8)), _houses),
+          ("forest", _treeline, _bigtrees),
+          ("field", _hills, _fence))
 
 
 # ---------------------------------------------------------------- strings ----
@@ -300,9 +372,10 @@ def build():
             o.append(db(flat, 16))
     o += ["", "; pipe patterns: shift*16 + {0 body, 5 cap edge, 10 cap fill}, 5 bytes each", "pipe_tab:", db(pipe_table(), 16)]
     o += ["pat_zero:", "        defs    5,0", "", "ground_tab:", db(GROUND, 16), ""]
-    o += ["; parallax layers, %d rows x 32 bytes each; rotated in place at run time (they live in RAM)" % BG_ROWS]
-    for label, fn in BG_LAYERS:
-        o += [label + ":", db(_layer(fn), 32)]
+    o += ["; parallax themes: far layer then near layer, %d rows x 32 bytes each; the selected theme's layers are" % BG_ROWS,
+          "; rotated in place at run time (they live in RAM)"]
+    for i, (_, far, near) in enumerate(THEMES):
+        o += ["bg_t%d:" % i, db(_layer(far), 32), db(_layer(near), 32)]
     o.append("")
     o += ["; bird names, one per bird, 0xFF-terminated", "bird_names:"]
     for i, n in enumerate(BIRD_NAMES):

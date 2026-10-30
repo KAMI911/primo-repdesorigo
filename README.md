@@ -55,17 +55,26 @@ A `-bw` és `-col` változat ugyanaz a kód a modellfelismerés nélkül; a legt
 | `tools/ptp.py` | `.ptp` író/ellenőrző, WAV (a Primo skill másolata) |
 | `tests/` | `run_tests.py` + `test_units.asm`: tábla-vezérelt egységtesztek Python-modell ellen, játékmenet-futtatás autopilottal |
 
-Háttér (parallax): három 12 soros réteg fut a föld fölött (a 140–175. pixelsorban): távol a város (ablakos épületek),
-középen az erdő (fenyők), elöl a mező (dombok, kerítés). Minden réteg egy 256 pixel széles, körbeforgó sáv a RAM-ban,
-amit helyben forgatunk egy pixellel balra, majd egyetlen `LDIR`-rel a képernyőre másolunk. Képkockánként legfeljebb
-egy réteg lép: a mező 4., az erdő 8., a város 16. kockánként (¼, ⅛, 1⁄16 pixel/kocka). A csövek alsó része a rétegek fölött
-úszik: ahol a cső ablaka teljes (5 bájt, nincs képernyőszélen), a cső 24 pixeles lábnyomán kívül a háttér látszik
-(`seg` a `gfx.asm`-ben), a madár törlése és a rés is visszaállítja a hátteret. Képernyő széléhez lógó cső ablakában a
-háttér még a régi módon nullázódik. A színes modellen a rétegek külön színt kapnak (szürkéskék / sötétzöld / világoszöld).
-A színes RAM cellái 4×4 pixelesek, ezért a rétegek színe a csöveket is átfestené: a cső 24 pixeles lábnyoma alatti
-cellák ezért fehér tintát (0-s paletta-csoport) kapnak, a cső ablakának többi cellája visszakapja a rétege színét
-(`pipe_colour` a `lib.asm`-ben). A színes menüben minden szövegsor betűinek felső 4 pixelsora fehér, az alsó 4 sárga
-(`menu_colour`, 5-ös paletta-csoport).
+Háttér (parallax): minden játék elején véletlenszerűen egy téma kerül a képernyőre: **város** (ablakos épületek,
+házak lámpákkal), **erdő** (fenyősor, lombos fák) vagy **mező** (dombok, kerítés virágokkal). Egy téma két 8 soros
+réteg (távoli és közeli) közvetlenül a föld fölött (a 160–175. pixelsorban). Minden réteg egy 256 pixel széles,
+körbeforgó sáv a RAM-ban, amit helyben forgatunk egy pixellel balra (`bg_rot`), majd a képernyőre másolunk. Képkockánként
+legfeljebb egy réteg lép: a közeli 4., a távoli 8. kockánként (¼ és ⅛ pixel/kocka).
+
+A csövek a háttér fölött úsznak: a cső ablaka a sávban a háttérrel összefésülődik (`seg`/`merge5` a `gfx.asm`-ben), a
+cső 24 pixeles lábnyomán kívül a háttér látszik, a madár törlése is visszaállítja a hátteret. A másolás (`bg_blit_skip`)
+kihagyja a csövek ablakai alatti bájtokat: ha a háttér-másolás egy pillanatra felülírná a csövet, és közben a
+képernyősugár éppen ott haladna el, a cső villogna.
+
+A rés teteje 40, 44 … 92 (4-gyel osztható), a rés 60 magas, a föld 176-nál kezdődik, így a cső minden széle a 4 pixeles
+színes cellák határára esik. A rés alja legfeljebb a 152. sor, a háttérsáv pedig a 160. sortól indul: a sáv sorai az
+ablak oszlopaiban mindig csőből vannak.
+
+Színes modellen a rétegek témánként külön színt kapnak (város: acélkék / barna, erdő: sötét / világoszöld, mező: zöld /
+olíva). A színes RAM cellái 4×4 pixelesek, ezért a cső 24 pixeles lábnyoma alatti cellák fehér tintát (0-s
+paletta-csoport) kapnak, a cső ablakának többi cellája visszakapja a rétege színét (`pipe_colour` a `lib.asm`-ben);
+a sáv fölött (ahol nincs háttér) nincs színezés. A színes menüben minden szövegsor betűinek felső 4 pixelsora fehér, az
+alsó 4 sárga (`menu_colour`, 5-ös paletta-csoport).
 
 Játékmenet: 256×192 pixel, a felső 16 sor a HUD, alul 16 sor föld. A csövek 2 pixelt lépnek játékkockánként,
 25 játékkocka/s (két képváltásonként egy). A rajzolás lépésenként csak a mozgó csöveket és a madarat frissíti.

@@ -10,17 +10,49 @@ t_start:
         ld      hl,VRAM_MONO
         ld      (v_scr),hl
 
-; ---- parallax: bg_rot x3 on the field, then bg_step for v_anim 6 (city), 2 (forest), 7 (nothing), 4 (field)
+; ---- bg_pick for themes 0, 1, 2 and an out-of-range value
+        ld      hl,res_pick
+        ld      (t_rp),hl
+        ld      b,4
+tpk_lp: push    bc
+        ld      a,b
+        ld      hl,tpk_in - 1
+        ld      e,a
+        ld      d,0
+        add     hl,de
+        ld      a,(hl)
+        call    bg_pick
+        ld      hl,(v_bg)
+        call    store_word
+        pop     bc
+        djnz    tpk_lp
+
+; ---- parallax (theme 1): bg_rot x3 on the near layer, then bg_step for v_anim 2 (far), 7 (nothing), 4 (near)
+        ld      hl,bg_t1
+        ld      (v_bg),hl
+        ld      hl,v_pipes              ; all pipes off-screen to the right
+        ld      b,N_PIPES
+tbg_pp: ld      (hl),0xE8
+        inc     hl
+        ld      (hl),3
+        inc     hl
+        inc     hl
+        inc     hl
+        djnz    tbg_pp
         ld      b,3
 tbg_rot:push    bc
-        ld      hl,bg_near
+        ld      hl,(v_bg)
+        ld      de,BG_ROWS * 32
+        add     hl,de
         call    bg_rot
         pop     bc
         djnz    tbg_rot
-        ld      hl,bg_near
+        ld      hl,(v_bg)
+        ld      de,BG_ROWS * 32
+        add     hl,de
         ld      a,BG_Y_NEAR
         call    bg_blit
-        ld      b,4
+        ld      b,3
 tbg_stp:push    bc
         ld      a,b
         ld      hl,tbg_anim - 1
@@ -32,21 +64,37 @@ tbg_stp:push    bc
         call    bg_step
         pop     bc
         djnz    tbg_stp
-        ld      hl,bg_far
+        ld      hl,(v_bg)
         ld      de,res_bg
-        ld      bc,3 * BG_ROWS * 32
+        ld      bc,2 * BG_ROWS * 32
         ldir
         ld      hl,VRAM_MONO + BG_Y_FAR * 32    ; what the blits put on the screen
         ld      de,res_bgscr
-        ld      bc,3 * BG_ROWS * 32
+        ld      bc,2 * BG_ROWS * 32
         ldir
-        ld      hl,bg_far               ; from here on the layers are blank: the other tests see a plain screen
-        ld      bc,3 * BG_ROWS * 32
+        ld      a,0x55                  ; a pipe at x = 100 (window = byte columns 12..16): bg_step must not touch them
+        call    fill_screen
+        ld      hl,v_pipes
+        ld      (hl),100
+        inc     hl
+        ld      (hl),0
+        ld      a,4
+        ld      (v_anim),a
+        call    bg_step
+        ld      hl,VRAM_MONO + BG_Y_NEAR * 32
+        ld      de,res_bgskip
+        ld      bc,BG_ROWS * 32
+        ldir
+        ld      hl,(v_bg)               ; from here on the layers are blank: the other tests see a plain screen
+        ld      bc,2 * BG_ROWS * 32
         xor     a
         call    memfill
         xor     a
         call    fill_screen
-
+        ld      hl,v_pipes
+        ld      bc,N_PIPES * PIPE_SZ
+        xor     a
+        call    memfill
 
 ; ---- row_addr for all 192 rows
         ld      hl,res_rows
@@ -154,8 +202,8 @@ tpc_loop:ld      hl,(t_n)
 tpc_done:
 
 ; ---- draw_pipe over a parallax background: layers = 0x33 + 5*i, screen prefilled 0xFF
-        ld      hl,bg_far
-        ld      bc,3 * BG_ROWS * 32
+        ld      hl,(v_bg)
+        ld      bc,2 * BG_ROWS * 32
         ld      a,0x33
 tpb_fill:ld     (hl),a
         add     a,5
@@ -411,7 +459,8 @@ tps_done:
         ld      (res_bc),bc
 
 t_done: halt
-tbg_anim: defb  4,7,2,6                 ; indexed by the countdown 4..1, so it runs 6 (city), 2 (forest), 7 (none), 4 (field)
+tpk_in:  defb   9,2,1,0                 ; indexed by the countdown 4..1: 0, 1, 2, 9
+tbg_anim: defb  4,7,2                   ; indexed by the countdown 3..1, so it runs 2 (far), 7 (none), 4 (near)
 
 ; ---------------------------------------------------------------- helpers ---
 ; case_begin  HL = table (count word, then entries), DE = result buffer.
@@ -522,5 +571,7 @@ res_score:  defs 256 * 4
 res_pstep:  defs 256 * 4
 res_reset:  defs 2 * N_PIPES * PIPE_SZ
 res_bc:     defw 0
-res_bg:     defs 3 * BG_ROWS * 32
-res_bgscr:  defs 3 * BG_ROWS * 32
+res_pick:   defs 8
+res_bg:     defs 2 * BG_ROWS * 32
+res_bgscr:  defs 2 * BG_ROWS * 32
+res_bgskip: defs BG_ROWS * 32
