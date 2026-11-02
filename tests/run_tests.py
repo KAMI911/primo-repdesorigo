@@ -30,7 +30,8 @@ C = {}  # constants from src/game.inc
 for name, val in re.findall(r"^defc\s+(\w+)\s*=\s*(\S+)", open("src/game.inc").read(), re.M):
     C[name] = int(val, 0)
 VRAM = 0xE800
-SPEED = [2, 3, 4]            # per level, mirrors speed_tab / space_tab in src/game.asm
+SPEED = [3, 4, 5]            # per level (start speed), mirrors speed_tab / space_tab in src/game.asm
+SPEED_BOT = [2, 3, 4]        # speed_tab under BOT_SLOW: the autopilot runs use it (no acceleration)
 SPACE = [112, 128, 144]
 GRAV = [0x28, 0x32, 0x3C]
 VMAX = [4, 5, 6]
@@ -347,13 +348,16 @@ def unit_tests():
     bad = [(s16(c[0]), c[1], c[2], r[i]) for i, c in enumerate(cases["coll"]) if r[i] != model_hit(s16(c[0]), c[1], c[2])]
     check(not bad, "collide_all == model for %d cases (bad: %s)" % (len(cases["coll"]), bad[:3]))
 
-    r = rd(mem, sym["res_score"], len(cases["score"]) * 4)
+    r = rd(mem, sym["res_score"], len(cases["score"]) * 5)
     bad = []
     for i, (x16, fl, sc) in enumerate(cases["score"]):
         x = s16(x16)
         passed = (not fl & 1) and x < C["SCORE_X"]
         exp = (int(passed), fl | int(passed), min(sc + int(passed), 999) if sc < 999 else sc)
-        got = (r[4 * i], r[4 * i + 1], u16(r, 4 * i + 2))
+        sc_new = exp[2]
+        spd = 3 + (1 if passed and sc_new != sc and sc_new % C["SPEED_EVERY"] == 0 and 3 < C["SPEED_MAX"] else 0)
+        exp += (spd,)
+        got = (r[5 * i], r[5 * i + 1], u16(r, 5 * i + 2), r[5 * i + 4])
         if got != exp:
             bad.append((x, fl, sc, got, exp))
     check(not bad, "score_check == model for %d cases (bad: %s)" % (len(cases["score"]), bad[:2]))
@@ -430,7 +434,7 @@ def screen_image(mem, base=VRAM):
 
 def headless(defs, bird=0, frames=400, bot=1, seed=0xACE1, tag="head", level=0, mono=0, theme=0):
     out = "%s/%s.bin" % (BUILD, tag)
-    sym = assemble("src/main.asm", out, ["HEADLESS", "NOHW"] + list(defs))
+    sym = assemble("src/main.asm", out, ["HEADLESS", "NOHW", "BOT_SLOW"] + list(defs))
     data = bytearray(open(out, "rb").read())
 
     def poke(name, val, n=1):
@@ -467,10 +471,10 @@ def gameplay(shots):
         r = headless([], seed=seed, frames=1500, tag="seed")
         check(r["frames"] == 1500 and r["score"] >= 1500 // 60 - 3, "seed %#x: 1500 frames alive, score %d" % (seed, r["score"]))
     for level in range(3):
-        need = 1500 * SPEED[level] // SPACE[level] - 3
+        need = 1500 * SPEED_BOT[level] // SPACE[level] - 3
         r = headless([], level=level, frames=1500, tag="level%d" % level)
         check(r["frames"] == 1500 and r["score"] >= need,
-              "level %d (speed %d, spacing %d): autopilot survives 1500 frames, score %d >= %d" % (level, SPEED[level], SPACE[level], r["score"], need))
+              "level %d (speed %d, spacing %d): autopilot survives 1500 frames, score %d >= %d" % (level, SPEED_BOT[level], SPACE[level], r["score"], need))
         if shots:
             screen_image(r["mem"]).resize((768, 576)).save(os.path.join(shots, "play_level%d.png" % level))
     for seed in (1, 0x1234, 0xBEEF, 0x7777):
@@ -567,11 +571,11 @@ def real_flow():
     r = scripted([0, 0, F, 0, 0, F] + [0] * 70 + [8, 0, 0, 0], "flow6")
     check(r["anim"] < 10, "game over: M returns to the menu (frame counter restarted: %d)" % r["anim"])
     r = scripted([0, 0, D, 0, D, 0, F, 0, 0, F, 0, 0], "flow7")
-    check(r["level"] == 2 and r["speed"] == 4, "menu: DOWN twice selects the hardest level, speed 4 (level %d, speed %d)" % (r["level"], r["speed"]))
+    check(r["level"] == 2 and r["speed"] == 5, "menu: DOWN twice selects the hardest level, speed 5 (level %d, speed %d)" % (r["level"], r["speed"]))
     r = scripted([0, 0, U, 0, F, 0, 0, F, 0, 0], "flow8")
     check(r["level"] == 2, "menu: UP from the easiest level wraps to the hardest (level %d)" % r["level"])
     r = scripted([0, 0, D, 0, F, 0, 0, F, 0, 0], "flow9")
-    check(r["level"] == 1 and r["speed"] == 3, "menu: DOWN once gives the middle level, speed 3 (level %d, speed %d)" % (r["level"], r["speed"]))
+    check(r["level"] == 1 and r["speed"] == 4, "menu: DOWN once gives the middle level, speed 4 (level %d, speed %d)" % (r["level"], r["speed"]))
     r = scripted([0, 0, 0x11, 0, 0, 0, 0, 0], "flow10")
     check(r["level"] == 2 and r["anim"] < 10, "menu: UP alone must not start the game (still in the menu, level %d)" % r["level"])
     r = scripted([0, 0, F, 0, 0, 0, 0, 0], "flow4")

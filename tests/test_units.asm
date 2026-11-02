@@ -418,12 +418,16 @@ tsk_loop:ld      hl,(t_n)
         inc     hl
         ld      (v_score),de
         ld      (t_cp),hl
+        ld      a,3
+        ld      (v_speed),a             ; start speed 3: score_check may speed it up
         call    score_check
         call    store_byte
         ld      a,(v_pipes+3)
         call    store_byte
         ld      hl,(v_score)
         call    store_word
+        ld      a,(v_speed)
+        call    store_byte
         jr      tsk_loop
 tsk_done:
 
@@ -589,7 +593,7 @@ res_spr:    defs 256 * 4
 res_text:   defs 64 * 4
 res_step:   defs 1100 * 4
 res_coll:   defs 1024
-res_score:  defs 256 * 4
+res_score:  defs 256 * 5
 res_pstep:  defs 256 * 4
 res_reset:  defs 2 * N_PIPES * PIPE_SZ
 res_bc:     defw 0

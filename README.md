@@ -98,3 +98,6 @@ Bizonytalan (hardver-dokumentáció alapján, nem mért) pontok:
 - a hangot a `$403B` árnyékregiszter értékéből a D4 bit billegtetésével adjuk (az NMI nincs letiltva, ezért kattanhat);
 - a 25 kocka/s feltételezi, hogy egy játékkocka (átlag ~66 000 T-state az emulátorban) belefér két képváltásba
   (2,5 MHz-es órajelnél 100 000 T-state); ha a gép lassabb, a játék egyszerűen lassabb lesz, nem áll le.
+
+A szintek indulósebessége 3 / 4 / 5 képpont képkockánként (`speed_tab`), és játék közben **egyre gyorsul**: minden 4. pont után
+1 képponttal gyorsabban jönnek a csövek, legfeljebb 8-ig (`SPEED_EVERY`, `SPEED_MAX` a `game.inc`-ben).

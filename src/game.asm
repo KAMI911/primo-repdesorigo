@@ -64,9 +64,13 @@ pr_loop:ld      (ix+0),l
         djnz    pr_loop
         ret
 
-; speed_tab: pipe speed in pixels per game frame for each level
+; speed_tab: starting pipe speed in pixels per game frame for each level (score_check then speeds up every SPEED_EVERY points, up to SPEED_MAX)
 speed_tab:
-        defb    2,3,4
+IF BOT_SLOW
+        defb    2,3,4                   ; emulator tests only: the crude autopilot cannot keep up with the real speeds
+ELSE
+        defb    3,4,5
+ENDIF
 space_tab:
         defw    112,128,144
 ; grav_tab / vmax_tab: the bird falls harder on the faster levels (gravity in 8.8 px/frame^2, terminal velocity in px/frame)
@@ -270,6 +274,19 @@ sc_pass:set     0,(ix+3)
         add     hl,de
         inc     hl
         ld      (v_score),hl
+IF !BOT_SLOW
+        ld      a,l
+        ld      c,SPEED_EVERY
+sc_mod: sub     c
+        jr      nc,sc_mod
+        add     a,c                     ; A = score mod SPEED_EVERY
+        jr      nz,sc_cap
+        ld      a,(v_speed)
+        cp      SPEED_MAX
+        jr      nc,sc_cap
+        inc     a
+        ld      (v_speed),a
+ENDIF
 sc_cap: pop     bc
 sc_next:ld      de,PIPE_SZ
         add     ix,de
