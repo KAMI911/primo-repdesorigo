@@ -5,8 +5,14 @@ defc N_LEVELS     = 3                   ; per level (speed_tab / space_tab): spe
 defc PIPE_X0      = 200                 ; first pipe at game start
 defc PIPE_MIN_X   = -32                 ; below this the pipe is gone (one blank draw at x >= -32 wipes its last pixels)
 defc GAP_H        = 60
-defc GT_MIN       = 40                  ; gap top range 40..92 (53 values)
-defc GT_RANGE     = 53
+defc GT_MIN       = 40                  ; gap top 40, 44 .. 92: a multiple of 4, so pipe edges fall on colour cell rows
+defc GT_STEP      = 4
+defc GT_RANGE     = 14                  ; number of values
+defc BG_ROWS      = 8                   ; parallax theme = two layers of 8 rows above the ground
+defc BG_Y_FAR     = 160                 ; far layer, rows 160..167 (a multiple of 8: the band starts on a 256 byte boundary)
+defc BG_Y_NEAR    = 168                 ; near layer, rows 168..175
+defc BAND_HI      = 20                  ; = BG_Y_FAR * 32 / 256: high byte offset of the band's first row (checked by the tests)
+defc N_THEMES     = 3                   ; city, forest, field: one is picked at random per game
 defc PLAY_TOP     = 16                  ; rows 0..15 = HUD
 defc PLAY_BOT     = 176                 ; rows 176..191 = ground
 defc BIRD_COL     = 8                   ; sprite is 2 bytes (16 px) wide, byte aligned

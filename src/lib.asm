@@ -126,46 +126,182 @@ clear_color:
         jp      colour_setup
 
 ; colour_setup (colour model only): palette entries 0..15 = pixel 0 colour, 16..31 = pixel 1 colour, picked by
-; the 4x4 cell nibble in colour RAM. Nibble 0 = night sky / white ink (everything), nibble 1 = brown / yellow
-; (ground). Palette bytes are stored inverted in all three banks. Clobbers AF,BC,DE,HL.
+; the 4x4 cell nibble in colour RAM (see pal_tab, one table per parallax theme). Nibble 0 = night sky / white ink
+; (everything), 1 = brown / yellow (ground), 2 / 3 = sky / far and near layer ink of the theme, 5 = sky / yellow
+; (lower half of the menu letters). Palette bytes are stored inverted in all three banks. Clobbers AF,BC,DE,HL.
 defc PAL_SKY    = 0x0B                  ; RRRGGGBB dark blue
 defc PAL_WHITE  = 0xFF
 defc PAL_BROWN  = 0x88
 defc PAL_YELLOW = 0xFC
 colour_setup:
+        ld      a,(v_theme)
+        add     a,a
+        add     a,a
+        add     a,a
+        add     a,a
+        add     a,a                     ; * 32
+        ld      e,a
+        ld      d,0
+        ld      hl,pal_tab
+        add     hl,de
+        ld      (v_pt),hl
         ld      hl,COL_PAL1
         ld      c,3                     ; three banks of 32 bytes
 cs_bank:
+        ld      de,(v_pt)
         ld      b,32
-        ld      d,0                     ; palette byte number
-cs_ent: ld      a,d
-        cp      16
-        ld      e,PAL_SKY
-        jr      c,cs_lo
-        ld      e,PAL_WHITE
-cs_lo:  ld      a,d
-        and     0x0F
-        cp      1
-        jr      nz,cs_put
-        ld      a,d
-        cp      16
-        ld      e,PAL_BROWN
-        jr      c,cs_put
-        ld      e,PAL_YELLOW
-cs_put: ld      a,e
+cs_ent: ld      a,(de)
         cpl
         ld      (hl),a
+        inc     de
         inc     hl
-        inc     d
         djnz    cs_ent
         dec     c
         jr      nz,cs_bank
         ld      a,0x81
         ld      (COL_CTRL),a
-        ld      hl,COL_RAM + (COLOR_TOP / 4 + 44) * 32  ; ground = game rows 176..191 = colour rows 46..49
-        ld      bc,4 * 32
+        ld      hl,COL_RAM + BG_COLROW * 32     ; layer cells, then the ground right below
+        ld      bc,2 * 32
+        ld      a,0x22
+        call    memfill
+        inc     hl                      ; memfill leaves HL on the last byte it wrote
+        ld      bc,2 * 32
+        ld      a,0x33
+        call    memfill
+        inc     hl
+        ld      bc,4 * 32               ; ground = game rows 176..191 = colour rows 46..49
         ld      a,0x11
         jp      memfill
+
+; pal_tab: per theme (city, forest, field): pixel 0 colours for nibble 0..15, then pixel 1 colours for nibble 0..15
+; (not inverted). Ink 2 / 3 = far / near layer.
+pal_tab:
+        defb    PAL_SKY,PAL_BROWN,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY
+        defb    PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY
+        defb    PAL_WHITE,PAL_YELLOW,0x49,0xA5,PAL_WHITE,PAL_YELLOW,PAL_WHITE,PAL_WHITE      ; city: steel blue / brown
+        defb    PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE
+        defb    PAL_SKY,PAL_BROWN,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY
+        defb    PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY
+        defb    PAL_WHITE,PAL_YELLOW,0x10,0x1C,PAL_WHITE,PAL_YELLOW,PAL_WHITE,PAL_WHITE      ; forest: dark / bright green
+        defb    PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE
+        defb    PAL_SKY,PAL_BROWN,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY
+        defb    PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY,PAL_SKY
+        defb    PAL_WHITE,PAL_YELLOW,0x3C,0xB8,PAL_WHITE,PAL_YELLOW,PAL_WHITE,PAL_WHITE      ; field: green / olive
+        defb    PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE,PAL_WHITE
+
+; menu_colour (colour model): every text row gets two-tone letters: the upper 4 pixel lines white (nibble 0), the lower
+; 4 yellow (nibble 5). One text row = two colour RAM rows of 4 lines. Clobbers all.
+menu_colour:
+        ld      hl,COL_RAM + (COLOR_TOP / 4) * 32
+        ld      b,24
+mc_row: push    bc
+        push    hl
+        ld      bc,32
+        xor     a
+        call    memfill
+        pop     hl
+        ld      de,32
+        add     hl,de
+        push    hl
+        ld      bc,32
+        ld      a,0x55
+        call    memfill
+        pop     hl
+        ld      de,32
+        add     hl,de
+        pop     bc
+        djnz    mc_row
+        ret
+
+; pipe_colour  IX = pipe (colour model): the four colour rows of the parallax band (2 per layer; gap bottoms are at
+; most at row 152, so a window's band rows are always pipe) get nibble 0 (white ink) under the pipe's 24 px
+; footprint, so the layer colours do not tint the pipe; the other cells of its 5-byte window get their layer's
+; nibble back. Same x range as draw_pipe. Clobbers all but IX.
+defc BG_COLROW  = COLOR_TOP / 4 + BG_Y_FAR / 4   ; first colour RAM row of the band
+pipe_colour:
+        ld      l,(ix+0)
+        ld      h,(ix+1)
+        ld      a,h
+        or      a
+        jr      z,pc_ok
+        inc     a
+        ret     nz                      ; x >= 256 or x < -256
+        ld      a,l
+        cp      0xE0
+        ret     c                       ; x < -32: gone
+pc_ok:  ld      (v_px),hl
+        sra     h
+        rr      l
+        sra     h
+        rr      l
+        sra     h
+        rr      l                       ; L = first window byte, -4..31
+        ld      a,l
+        ld      (v_pc),a
+        ld      a,5
+        ld      (v_pn),a
+pc_loop:ld      a,(v_pc)
+        bit     7,a
+        jr      nz,pc_next              ; left of the screen
+        cp      32
+        jr      nc,pc_next              ; right of it
+        call    pc_byte
+pc_next:ld      hl,v_pc
+        inc     (hl)
+        ld      hl,v_pn
+        dec     (hl)
+        jr      nz,pc_loop
+        ret
+
+; pc_byte  A = screen byte column -> the nine band cells of that column (3 layers x 3 colour rows).
+pc_byte:
+        ld      c,a
+        ld      h,0
+        ld      l,a
+        add     hl,hl
+        add     hl,hl
+        add     hl,hl                   ; first pixel of the byte
+        ld      de,(v_px)
+        or      a
+        sbc     hl,de                   ; relative to the pipe's left edge
+        ld      de,3
+        add     hl,de                   ; a cell [s, s+3] overlaps the 24 px footprint when 0 <= s - x + 3 < 27
+        ld      b,0xFF                  ; B = nibbles that keep the layer colour
+        ld      a,h
+        or      a
+        jr      nz,pb_r
+        ld      a,l
+        cp      27
+        jr      nc,pb_r
+        ld      b,0x0F                  ; left cell under the pipe
+pb_r:   ld      de,4
+        add     hl,de
+        ld      a,h
+        or      a
+        jr      nz,pb_w
+        ld      a,l
+        cp      27
+        jr      nc,pb_w
+        ld      a,b
+        and     0xF0
+        ld      b,a                     ; right cell under the pipe
+pb_w:   ld      hl,COL_RAM + BG_COLROW * 32
+        ld      e,c
+        ld      d,0
+        add     hl,de
+        ld      de,32
+        ld      a,0x22
+        and     b
+        ld      (hl),a
+        add     hl,de
+        ld      (hl),a
+        add     hl,de
+        ld      a,0x33
+        and     b
+        ld      (hl),a
+        add     hl,de
+        ld      (hl),a
+        ret
 
 ; beep  B = half-period delay (T ~ 16*B+30), C = number of half periods (1..255; 0 = 256).
 ; Toggles the speaker bit D4 starting from the shadow register value and restores it. NMI may click: harmless.

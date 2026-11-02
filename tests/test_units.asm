@@ -10,6 +10,92 @@ t_start:
         ld      hl,VRAM_MONO
         ld      (v_scr),hl
 
+; ---- bg_pick for themes 0, 1, 2 and an out-of-range value
+        ld      hl,res_pick
+        ld      (t_rp),hl
+        ld      b,4
+tpk_lp: push    bc
+        ld      a,b
+        ld      hl,tpk_in - 1
+        ld      e,a
+        ld      d,0
+        add     hl,de
+        ld      a,(hl)
+        call    bg_pick
+        ld      hl,(v_bg)
+        call    store_word
+        pop     bc
+        djnz    tpk_lp
+
+; ---- parallax (theme 1): bg_rot x3 on the near layer, then bg_step for v_anim 2 (far), 7 (nothing), 4 (near)
+        ld      hl,bg_t1
+        ld      (v_bg),hl
+        ld      hl,v_pipes              ; all pipes off-screen to the right
+        ld      b,N_PIPES
+tbg_pp: ld      (hl),0xE8
+        inc     hl
+        ld      (hl),3
+        inc     hl
+        inc     hl
+        inc     hl
+        djnz    tbg_pp
+        ld      b,3
+tbg_rot:push    bc
+        ld      hl,(v_bg)
+        ld      de,BG_ROWS * 32
+        add     hl,de
+        call    bg_rot
+        pop     bc
+        djnz    tbg_rot
+        ld      hl,(v_bg)
+        ld      de,BG_ROWS * 32
+        add     hl,de
+        ld      a,BG_Y_NEAR
+        call    bg_blit
+        ld      b,3
+tbg_stp:push    bc
+        ld      a,b
+        ld      hl,tbg_anim - 1
+        ld      e,a
+        ld      d,0
+        add     hl,de
+        ld      a,(hl)
+        ld      (v_anim),a
+        call    bg_step
+        pop     bc
+        djnz    tbg_stp
+        ld      hl,(v_bg)
+        ld      de,res_bg
+        ld      bc,2 * BG_ROWS * 32
+        ldir
+        ld      hl,VRAM_MONO + BG_Y_FAR * 32    ; what the blits put on the screen
+        ld      de,res_bgscr
+        ld      bc,2 * BG_ROWS * 32
+        ldir
+        ld      a,0x55                  ; a pipe at x = 100 (window = byte columns 12..16): bg_step must not touch them
+        call    fill_screen
+        ld      hl,v_pipes
+        ld      (hl),100
+        inc     hl
+        ld      (hl),0
+        ld      a,4
+        ld      (v_anim),a
+        call    bg_step
+        ld      hl,VRAM_MONO + BG_Y_NEAR * 32
+        ld      de,res_bgskip
+        ld      bc,BG_ROWS * 32
+        ldir
+        ld      hl,(v_bg)               ; from here on the layers are blank: the other tests see a plain screen
+        ld      bc,2 * BG_ROWS * 32
+        xor     a
+        call    memfill
+        xor     a
+        call    fill_screen
+        ld      hl,v_pipes
+        ld      bc,N_PIPES * PIPE_SZ
+        xor     a
+        call    memfill
+
 ; ---- row_addr for all 192 rows
         ld      hl,res_rows
         ld      (t_rp),hl
@@ -51,6 +137,27 @@ trn_nz:  ld      a,h
         cp      1
         jr      nz,trn_loop
         ld      (res_period),de
+
+; ---- theme_next for every previous theme with random bytes 0..3
+        ld      hl,res_tn
+        ld      d,0
+ttn_o:  ld      e,0
+ttn_i:  ld      a,d
+        ld      (v_theme),a
+        ld      a,e
+        push    hl
+        call    theme_next
+        pop     hl
+        ld      (hl),a
+        inc     hl
+        inc     e
+        ld      a,e
+        cp      4
+        jr      c,ttn_i
+        inc     d
+        ld      a,d
+        cp      N_THEMES
+        jr      c,ttn_o
 
 ; ---- gap_map over all 256 input bytes
         ld      hl,res_gap
@@ -114,6 +221,48 @@ tpc_loop:ld      hl,(t_n)
         call    store_checksum
         jr      tpc_loop
 tpc_done:
+
+; ---- draw_pipe over a parallax background: layers = 0x33 + 5*i, screen prefilled 0xFF
+        ld      hl,(v_bg)
+        ld      bc,2 * BG_ROWS * 32
+        ld      a,0x33
+tpb_fill:ld     (hl),a
+        add     a,5
+        inc     hl
+        dec     bc
+        push    af
+        ld      a,b
+        or      c
+        jr      z,tpb_fd
+        pop     af
+        jr      tpb_fill
+tpb_fd: pop     af
+        ld      hl,pipebg_cases
+        ld      de,res_pipebg
+        call    case_begin
+tpb_loop:ld     hl,(t_n)
+        ld      a,h
+        or      l
+        jr      z,tpb_done
+        dec     hl
+        ld      (t_n),hl
+        ld      a,0xFF
+        call    fill_screen
+        call    setup_far
+        ld      hl,(t_cp)
+        ld      de,v_pipes
+        ld      bc,3
+        ldir
+        ld      (t_cp),hl
+        xor     a
+        ld      (v_cov),a
+        ld      ix,v_pipes
+        call    draw_pipe
+        ld      a,(v_cov)
+        call    store_byte
+        call    store_checksum
+        jr      tpb_loop
+tpb_done:
 
 ; ---- draw_sprite: screen prefilled 0x5A; cases (sprite index, row, column)
         ld      hl,spr_cases
@@ -331,6 +480,8 @@ tps_done:
         ld      (res_bc),bc
 
 t_done: halt
+tpk_in:  defb   9,2,1,0                 ; indexed by the countdown 4..1: 0, 1, 2, 9
+tbg_anim: defb  4,7,2                   ; indexed by the countdown 3..1, so it runs 2 (far), 7 (none), 4 (near)
 
 ; ---------------------------------------------------------------- helpers ---
 ; case_begin  HL = table (count word, then entries), DE = result buffer.
@@ -430,8 +581,10 @@ res_rows:   defs 192 * 2
 res_zero:   defb 0
 res_period: defw 0
 res_gap:    defs 256
+res_tn:     defs 12
 res_dec:    defs 1101 * 3
 res_pipe:   defs 1024 * 5
+res_pipebg: defs 128 * 5
 res_spr:    defs 256 * 4
 res_text:   defs 64 * 4
 res_step:   defs 1100 * 4
@@ -440,3 +593,7 @@ res_score:  defs 256 * 4
 res_pstep:  defs 256 * 4
 res_reset:  defs 2 * N_PIPES * PIPE_SZ
 res_bc:     defw 0
+res_pick:   defs 8
+res_bg:     defs 2 * BG_ROWS * 32
+res_bgscr:  defs 2 * BG_ROWS * 32
+res_bgskip: defs BG_ROWS * 32

@@ -36,6 +36,7 @@ GRAV = [0x28, 0x32, 0x3C]
 VMAX = [4, 5, 6]
 BIRD_DG = [0, -6, 3, 8]      # mirrors bird_dg in src/game.asm
 FAILS = []
+G_THEMES = len(G.THEMES)
 
 
 def check(cond, what):
@@ -97,8 +98,18 @@ def pattern_for_row(r, gt):
     return G.BODY
 
 
-def model_pipe(x, gt, screen):
-    """Draw one pipe into `screen` (bytearray, 32 bytes/row from row 0); returns v_cov."""
+BG_Y = C["BG_Y_FAR"]           # first row of the parallax band
+GT_VALUES = [C["GT_MIN"] + C["GT_STEP"] * i for i in range(C["GT_RANGE"])]
+
+
+def bg_byte(bg, r, c):
+    return bg[(r - BG_Y) * 32 + c] if bg is not None and r >= BG_Y else 0
+
+
+def model_pipe(x, gt, screen, bg=None):
+    """Draw one pipe into `screen` (bytearray, 32 bytes/row from row 0); returns v_cov. `bg` = the parallax layers
+    (bytes from the band's first row on): in the band every window keeps the background outside the pipe's 24 px
+    footprint, and restored gap rows show it."""
     if x < C["PIPE_MIN_X"] or x >= 256:
         return 0
     col = x // 8                       # floor
@@ -112,10 +123,18 @@ def model_pipe(x, gt, screen):
         if pat is None and not ovl:
             continue
         for c in range(lo, hi + 1):
+            if pat is None:
+                screen[r * 32 + c] = bg_byte(bg, r, c)         # gap row under the bird: restore
+                continue
             b = 0
+            keep = r >= BG_Y
+            under = bg_byte(bg, r, c)
             for bit in range(8):
                 px = c * 8 + bit - x
-                if pat is not None and 0 <= px < 24 and pat[px]:
+                if 0 <= px < 24:
+                    if pat[px]:
+                        b |= 0x80 >> bit
+                elif keep and under & (0x80 >> bit):
                     b |= 0x80 >> bit
             screen[r * 32 + c] = b
     return cov
@@ -172,7 +191,7 @@ def model_hit(x, gt, y):
 
 # ------------------------------------------------------------------- cases --
 def rnd_gap(rng):
-    return rng.randrange(C["GT_MIN"], C["GT_MIN"] + C["GT_RANGE"])
+    return rng.choice(GT_VALUES)
 
 
 def build_cases():
@@ -180,7 +199,7 @@ def build_cases():
     cases = {}
     cases["pipe"] = [(x & 0xFFFF, rnd_gap(rng)) for x in range(-40, 266)]
     cases["pipe"] += [(x & 0xFFFF, g) for x in (-32, -31, -25, -24, -23, -17, -16, 0, 7, 8, 64, 72, 248, 255)
-                      for g in (C["GT_MIN"], C["GT_MIN"] + C["GT_RANGE"] - 1)]
+                      for g in (GT_VALUES[0], GT_VALUES[-1])]
     cases["spr"] = [(i, y, c) for i in range(2 * len(G.BIRDS)) for y in (16, 88, 160, 176)
                     for c in (8, 30)]
     cases["spr"] += [(0, 177, 8), (0, 88, 31), (1, 255, 8), (2, 88, 255), (3, 0, 0)]
@@ -190,6 +209,8 @@ def build_cases():
                      (2, 0, 6, 0), (2, 0, 6, 7), (2, 1, 3, 123), (2, 2, 4, 999), (2, 3, 4, 1000), (2, 4, 30, 456),
                      (2, 5, 31, 12), (1, 6, 0, "s_ready2"), (1, 7, 0, "s_again"), (1, 8, 0, "s_over"),
                      (1, 9, 0, "s_new"), (1, 10, 0, "s_menu"), (1, 11, 0, "s_keys")]
+    cases["pipebg"] = [(x & 0xFFFF, g) for x in (-30, -9, -8, 0, 3, 8, 40, 56, 63, 64, 72, 77, 100, 183, 216, 220, 224, 231, 240, 250)
+                       for g in (40, 64, 92)]
     cases["step"] = [(y << 8 | f, vy & 0xFFFF, lv, bird) for y in (16, 100, 159, 160)
                      for f in (0, 0xFF) for vy in (0, 0x28, -0x300, 0x3FF, 0x400, 0x500, 0x5FF, 0x600, 0x700, -0x100, -0x2F0)
                      for lv in range(len(GRAV)) for bird in range(len(BIRD_DG))]
@@ -216,6 +237,7 @@ def write_cases(cases):
     table("spr_cases", cases["spr"], lambda e: "defb %d,%d,%d" % e)
     table("text_cases", cases["text"],
           lambda e: "defb %d,%d,%d\n        defw %s" % (e[0], e[1], e[2], e[3]))
+    table("pipebg_cases", cases["pipebg"], lambda e: "defb %d,%d,%d" % (e[0] & 255, e[0] >> 8, e[1]))
     table("step_cases", cases["step"], lambda e: "defw %d,%d,%d,%d" % e)
     table("coll_cases", cases["coll"], lambda e: "defb %d,%d,%d,%d" % (e[0] & 255, e[0] >> 8, e[1], e[2]))
     table("score_cases", cases["score"], lambda e: "defb %d,%d,%d\n        defw %d" % (e[0] & 255, e[0] >> 8, e[1], e[2]))
@@ -252,9 +274,14 @@ def unit_tests():
     check(u16(mem, sym["res_period"]) == 65535 and mem[sym["res_zero"]] == 0, "rand8: period 65535, state never 0")
 
     g = rd(mem, sym["res_gap"], 256)
-    check(all(g[i] == 40 + ((i & 63) if (i & 63) < 53 else (i & 63) - 53) for i in range(256)), "gap_map matches model")
-    check(min(g) == C["GT_MIN"] and max(g) == C["GT_MIN"] + C["GT_RANGE"] - 1, "gap_map covers exactly 40..92")
-    check(C["GT_MIN"] + C["GT_RANGE"] - 1 + C["GAP_H"] + 8 <= C["PLAY_BOT"] - 16, "gap range leaves >= 16 px of bottom pipe")
+    check(all(g[i] == GT_VALUES[(i & 15) if (i & 15) < C["GT_RANGE"] else (i & 15) - C["GT_RANGE"]] for i in range(256)),
+          "gap_map matches model")
+    check(sorted(set(g)) == GT_VALUES and all(v % 4 == 0 for v in GT_VALUES), "gap_map covers exactly 40, 44 .. 92 (multiples of 4)")
+    check(GT_VALUES[-1] + C["GAP_H"] + 8 <= C["PLAY_BOT"] - 16, "gap range leaves >= 16 px of bottom pipe")
+    check(GT_VALUES[-1] + C["GAP_H"] <= C["BG_Y_FAR"], "gaps end at or above the parallax band (band rows are always pipe)")
+    check(C["BAND_HI"] == C["BG_Y_FAR"] * 32 // 256 and C["BG_Y_FAR"] % 8 == 0 and C["BG_Y_NEAR"] == C["BG_Y_FAR"] + C["BG_ROWS"]
+          and C["BG_Y_NEAR"] + C["BG_ROWS"] == C["PLAY_BOT"] and C["BG_ROWS"] * 32 == 256 and C["BG_ROWS"] % 4 == 0 and C["GAP_H"] % 4 == 0 and C["PLAY_TOP"] % 4 == 0
+          and C["PLAY_BOT"] % 4 == 0, "band geometry: a layer is 256 bytes (bg_pick strides by 2 pages), starts on a 256 byte boundary, ends at the ground, all edges on 4 line colour rows")
     check(C["GT_MIN"] - 8 - C["PLAY_TOP"] >= 16, "gap range leaves >= 16 px of top pipe")
 
     d = rd(mem, sym["res_dec"], 1101 * 3)
@@ -271,6 +298,18 @@ def unit_tests():
         if got != (cov, s1, s2):
             bad.append((s16(x16), gt, got, (cov, s1, s2)))
     check(not bad, "draw_pipe == pixel model for %d cases (first bad: %s)" % (len(cases["pipe"]), bad[:2]))
+
+    bgl = [(0x33 + 5 * i) & 0xFF for i in range(2 * G.BG_ROWS * 32)]
+    r = rd(mem, sym["res_pipebg"], len(cases["pipebg"]) * 5)
+    bad = []
+    for i, (x16, gt) in enumerate(cases["pipebg"]):
+        scr = bytearray([0xFF]) * 6144
+        cov = model_pipe(s16(x16), gt, scr, bgl)
+        s1, s2 = checksum(scr)
+        got = (r[5 * i], u16(r, 5 * i + 1), u16(r, 5 * i + 3))
+        if got != (cov, s1, s2):
+            bad.append((s16(x16), gt, got, (cov, s1, s2)))
+    check(not bad, "draw_pipe over the parallax band == model for %d cases (first bad: %s)" % (len(cases["pipebg"]), bad[:2]))
 
     r = rd(mem, sym["res_spr"], len(cases["spr"]) * 4)
     bad = []
@@ -325,7 +364,7 @@ def unit_tests():
         x = s16(x16) - SPEED[sp]
         if x < C["PIPE_MIN_X"]:
             x += 3 * SPACE[sp]
-            ok = C["GT_MIN"] <= r[4 * i + 2] < C["GT_MIN"] + C["GT_RANGE"] and r[4 * i + 3] == 0
+            ok = r[4 * i + 2] in GT_VALUES and r[4 * i + 3] == 0
         else:
             ok = r[4 * i + 2] == gt and r[4 * i + 3] == fl
         if not ok or s16(u16(r, 4 * i)) != x:
@@ -336,9 +375,39 @@ def unit_tests():
     for lv in (0, 2):
         xs = [s16(u16(r, 12 * (lv // 2) + 4 * i)) for i in range(3)]
         want = [200 + i * SPACE[lv] for i in range(3)]
-        check(xs == want and all(40 <= r[12 * (lv // 2) + 4 * i + 2] <= 92 and r[12 * (lv // 2) + 4 * i + 3] == 0 for i in range(3)),
+        check(xs == want and all(r[12 * (lv // 2) + 4 * i + 2] in GT_VALUES and r[12 * (lv // 2) + 4 * i + 3] == 0 for i in range(3)),
               "pipes_reset level %d places pipes %s (want %s) with legal gaps" % (lv, xs, want))
 
+    tn = list(rd(mem, sym["res_tn"], 12))
+    want = [(prev + 1 + (b & 1)) % 3 for prev in range(3) for b in range(4)]
+    check(tn == want and all(tn[4 * p + i] != p for p in range(3) for i in range(4)),
+          "theme_next never repeats the previous theme and uses both others: %s" % tn)
+
+    pk = [u16(rd(mem, sym["res_pick"], 8), 2 * i) for i in range(4)]
+    check(pk == [sym["bg_t0"], sym["bg_t1"], sym["bg_t2"], sym["bg_t0"]], "bg_pick selects themes 0, 1, 2 (9 -> 0): %s" % [hex(v) for v in pk])
+    # parallax: layers rotate one pixel left per update and are copied to their screen rows
+    def rot(layer, n):
+        out = []
+        for y in range(G.BG_ROWS):
+            v = int.from_bytes(bytes(layer[y * 32:y * 32 + 32]), "big")
+            for _ in range(n):
+                v = ((v << 1) | (v >> 255)) & ((1 << 256) - 1)
+            out += list(v.to_bytes(32, "big"))
+        return out
+    _, far_fn, near_fn = G.THEMES[1]                    # the test runs theme 1 (forest)
+    art = [G._layer(far_fn), G._layer(near_fn)]
+    want = [rot(art[0], 1), rot(art[1], 4)]
+    n = G.BG_ROWS * 32
+    r = rd(mem, sym["res_bg"], 2 * n)
+    got = [list(r[i * n:(i + 1) * n]) for i in range(2)]
+    check(got == want, "parallax layers rotate: far x1, near x4 (bg_pick / bg_rot / bg_step phases)")
+    rs = rd(mem, sym["res_bgscr"], 2 * n)
+    shown = [list(rs[i * n:(i + 1) * n]) for i in range(2)]
+    check(shown == want, "parallax layers are blitted to their screen rows (far 160, near 168)")
+    sk = list(rd(mem, sym["res_bgskip"], n))
+    near5 = rot(art[1], 5)
+    want_sk = [0x55 if 12 <= c <= 16 else near5[y * 32 + c] for y in range(G.BG_ROWS) for c in range(32)]
+    check(sk == want_sk, "bg_step leaves the bytes under a pipe window (columns 12..16) alone")
     check(u16(mem, sym["res_bc"]) == 0x1234, "wait_vsync preserves BC (res_bc=%#x)" % u16(mem, sym["res_bc"]))
 
     # the whole image stays below the second screen page
@@ -359,7 +428,7 @@ def screen_image(mem, base=VRAM):
     return img
 
 
-def headless(defs, bird=0, frames=400, bot=1, seed=0xACE1, tag="head", level=0, mono=0):
+def headless(defs, bird=0, frames=400, bot=1, seed=0xACE1, tag="head", level=0, mono=0, theme=0):
     out = "%s/%s.bin" % (BUILD, tag)
     sym = assemble("src/main.asm", out, ["HEADLESS", "NOHW"] + list(defs))
     data = bytearray(open(out, "rb").read())
@@ -370,6 +439,7 @@ def headless(defs, bird=0, frames=400, bot=1, seed=0xACE1, tag="head", level=0, 
     poke("headless_bird", bird)
     poke("headless_level", level)
     poke("headless_mono", mono)
+    poke("headless_theme", theme)
     poke("headless_bot", bot)
     poke("headless_frames", frames, 2)
     poke("headless_seed", seed, 2)
@@ -387,6 +457,12 @@ def gameplay(shots):
               "bird %d: autopilot survives 700 frames and passes pipes (score %d, frames %d)" % (bird, r["score"], r["frames"]))
         if shots and bird == 0:
             screen_image(r["mem"]).resize((768, 576)).save(os.path.join(shots, "play.png"))
+    for theme in range(G_THEMES):
+        r = headless([], theme=theme, frames=700, tag="theme%d" % theme)
+        check(r["frames"] == 700 and r["score"] >= 700 // 60 - 2,
+              "theme %d (%s): autopilot survives 700 frames (score %d)" % (theme, G.THEMES[theme][0], r["score"]))
+        if shots:
+            screen_image(r["mem"]).resize((768, 576)).save(os.path.join(shots, "play_%s.png" % G.THEMES[theme][0]))
     for seed in (1, 0x1234, 0xBEEF, 0x7777, 0xFFFF):
         r = headless([], seed=seed, frames=1500, tag="seed")
         check(r["frames"] == 1500 and r["score"] >= 1500 // 60 - 3, "seed %#x: 1500 frames alive, score %d" % (seed, r["score"]))
@@ -427,6 +503,28 @@ def gameplay(shots):
     check(m[0xE020] == 0xF4 and m[0xE030] == 0x00 and m[0xE021] == 0x77 and m[0xE031] == 0x03,
           "colour palette: sky/white, ground brown/yellow, stored inverted")
     check(all(m[0xE080 + 46 * 32 + i] == 0x11 for i in range(128)) and m[0xE080] == 0, "colour RAM: ground cells use palette group 1")
+    # pipes keep white ink over the parallax band: cells under a pipe's 24 px footprint have nibble 0, all others
+    # their layer's nibble (2 far, 3 near; two colour rows each, starting at colour row 42)
+    pipes = [(s16(m[r["sym"]["v_pipes"] + 4 * i] | m[r["sym"]["v_pipes"] + 4 * i + 1] << 8)) for i in range(C["N_PIPES"])]
+    bad = []
+    for cr in range(4):
+        layer = 2 + cr // 2
+        for b in range(32):
+            want = 0
+            for half in (0, 1):
+                s = b * 8 + half * 4
+                hit = any(-32 <= px < 256 and s + 3 >= px and s <= px + 23 for px in pipes)
+                want |= 0 if hit else layer << (4 if half == 0 else 0)
+            got = m[0xE080 + (42 + cr) * 32 + b]
+            if got != want:
+                bad.append((cr, b, got, want))
+    check(not bad, "colour RAM: pipes (x=%s) recolour the band cells under them (bad: %s)" % (pipes, bad[:3]))
+    # colour menu: two-tone letters (upper 4 lines nibble 0, lower 4 lines nibble 5) on all 24 text rows
+    r2 = headless(["SHOT_MENU", "TARGET_COLOR"], tag="menu_colour")
+    m2 = r2["mem"]
+    check(all(m2[0xE080 + (2 + 2 * t) * 32 + b] == 0x00 and m2[0xE080 + (3 + 2 * t) * 32 + b] == 0x55
+              for t in range(24) for b in range(32)) and m2[0xE001] == 0x81,
+          "colour menu: every text row has white upper / yellow lower letter halves")
     # colour model, colour switched off (C in the menu): control area wiped ($E001 = 0, no palette, no colour RAM),
     # the picture is the plain mono one at $E800
     r = headless(["TARGET_COLOR"], frames=300, tag="mono_on_colour", mono=1)

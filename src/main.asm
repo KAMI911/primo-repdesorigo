@@ -59,6 +59,7 @@ done:   halt
 headless_bird:   defb 0
 headless_level:  defb 0
 headless_mono:   defb 0
+headless_theme:  defb 0
 headless_bot:    defb 1
 headless_frames: defw 400
 headless_seed:   defw 0xACE1
@@ -100,6 +101,13 @@ menu_screen:
         ld      b,4
         call    draw_text_center
 ms_nocol:
+        ld      a,(v_color)
+        or      a
+        jr      z,ms_mono
+        ld      a,(v_mono)
+        or      a
+        call    z,menu_colour           ; two-tone letters on the colour model
+ms_mono:
         call    menu_level
         xor     a
         ld      (v_anim),a
@@ -300,9 +308,22 @@ md_next:pop     bc
 play:
         ld      a,(v_level)
         call    level_setup             ; speed and this level's best
+IF HEADLESS
+        ld      a,(headless_theme)
+ELSE
+        call    rand8                   ; the theme of this game: city, forest or field, never the same as the last one
+        call    theme_next
+ENDIF
+        call    bg_pick                 ; before clear_screen: the colour palette depends on it
         ld      a,(v_color)
         call    clear_screen
         call    draw_ground
+        call    bg_draw_all
+        ld      a,(v_mono)              ; pipes recolour the band cells only when colour is on
+        xor     1
+        ld      hl,v_color
+        and     (hl)
+        ld      (v_pcol),a
         call    pipes_reset
         ld      hl,BIRD_Y0 * 256
         ld      (v_y),hl
@@ -398,7 +419,8 @@ pl_noflap:
         call    beep
         ld      bc,0x0C3C
         call    beep
-pl_draw:call    render_frame
+pl_draw:call    bg_step                 ; one parallax layer scrolls, then pipes and bird are drawn over it
+        call    render_frame
         call    collide_all
         or      a
         jr      nz,pl_dead
