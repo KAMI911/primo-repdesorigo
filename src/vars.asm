@@ -43,9 +43,9 @@ v_pc:       defb    0
 v_pn:       defb    0
 v_skip:     defs    32                  ; bg_skipmap
 v_seg:      defs    10
-v_tmp:      defs    5                   ; seg: merged window of a clipped pipe
+v_tmp:      defs    6                   ; seg: merged window of a clipped pipe
 v_sbase:    defw    0
-v_full:     defb    0                   ; draw_pipe: window is complete (5 bytes, unclipped)
+v_full:     defb    0                   ; draw_pipe: window is complete (6 bytes, unclipped)
 v_q:        defb    0                   ; seg: rows left inside the parallax band
 v_rows:     defb    0
             defs    96                  ; stack

@@ -35,7 +35,8 @@ SPEED_BOT = [2, 3, 4]        # speed_tab under BOT_SLOW: the autopilot runs use 
 SPACE = [112, 128, 144]
 GRAV = [0x28, 0x32, 0x3C]
 VMAX = [4, 5, 6]
-BIRD_DG = [0, -6, 3, 8]      # mirrors bird_dg in src/game.asm
+BIRD_DG = [0, -6, 3, 40]     # mirrors bird_dg in src/game.asm
+BIRD_DV = [0, 0, 0, 2]       # mirrors bird_dv: terminal velocity bonus
 FAILS = []
 G_THEMES = len(G.THEMES)
 
@@ -114,7 +115,7 @@ def model_pipe(x, gt, screen, bg=None):
     if x < C["PIPE_MIN_X"] or x >= 256:
         return 0
     col = x // 8                       # floor
-    lo, hi = max(col, 0), min(col + 4, 31)
+    lo, hi = max(col, 0), min(col + 5, 31)
     ovl = lo <= C["BIRD_COL"] + 1 and hi >= C["BIRD_COL"]
     cov = 0
     if ovl:
@@ -174,8 +175,8 @@ def model_text(row, col, codes, screen):
 def model_step(y, vy, lv, bird):
     vy = s16(vy)
     vy += GRAV[lv] + BIRD_DG[bird]
-    if vy >= VMAX[lv] * 256:
-        vy = VMAX[lv] * 256
+    if vy >= (VMAX[lv] + BIRD_DV[bird]) * 256:
+        vy = (VMAX[lv] + BIRD_DV[bird]) * 256
     y += vy
     if (y >> 8) >= C["BIRD_YMAX"]:
         y, vy = C["BIRD_YMAX"] * 256, 0
@@ -199,7 +200,7 @@ def build_cases():
     rng = random.Random(1234)
     cases = {}
     cases["pipe"] = [(x & 0xFFFF, rnd_gap(rng)) for x in range(-40, 266)]
-    cases["pipe"] += [(x & 0xFFFF, g) for x in (-32, -31, -25, -24, -23, -17, -16, 0, 7, 8, 64, 72, 248, 255)
+    cases["pipe"] += [(x & 0xFFFF, g) for x in (-40, -39, -33, -32, -31, -25, -24, -23, -17, -16, 0, 7, 8, 64, 72, 248, 255)
                       for g in (GT_VALUES[0], GT_VALUES[-1])]
     cases["spr"] = [(i, y, c) for i in range(2 * len(G.BIRDS)) for y in (16, 88, 160, 176)
                     for c in (8, 30)]
@@ -375,6 +376,21 @@ def unit_tests():
             bad.append((s16(x16), gt, fl, sp, s16(u16(r, 4 * i)), r[4 * i + 2], r[4 * i + 3]))
     check(not bad, "pipes_step (move, recycle, new gap, flag reset) for %d cases (bad: %s)" % (len(cases["pstep"]), bad[:2]))
 
+    # erasing: whatever a pipe drew at x_old is overwritten by its window at x_old - speed (or is off screen when it is recycled)
+    bad = []
+    for sp in range(1, C["SPEED_MAX"] + 1):
+        for x_old in range(C["PIPE_MIN_X"], 256):
+            x = x_old - sp
+            old_cols = {c for c in range(max(x_old // 8, 0), min((x_old + 23) // 8, 31) + 1)}
+            if x < C["PIPE_MIN_X"]:
+                if old_cols:
+                    bad.append((sp, x_old))                    # recycled while it still shows
+                continue
+            win = set(range(max(x // 8, 0), min(x // 8 + 5, 31) + 1))
+            if not old_cols <= win:
+                bad.append((sp, x_old))
+    check(not bad, "speeds 1..%d: the 6 byte window (and the PIPE_MIN_X recycling) leaves no old pipe pixels behind (bad: %s)" % (C["SPEED_MAX"], bad[:3]))
+
     r = rd(mem, sym["res_reset"], 24)
     for lv in (0, 2):
         xs = [s16(u16(r, 12 * (lv // 2) + 4 * i)) for i in range(3)]
@@ -410,8 +426,8 @@ def unit_tests():
     check(shown == want, "parallax layers are blitted to their screen rows (far 160, near 168)")
     sk = list(rd(mem, sym["res_bgskip"], n))
     near5 = rot(art[1], 5)
-    want_sk = [0x55 if 12 <= c <= 16 else near5[y * 32 + c] for y in range(G.BG_ROWS) for c in range(32)]
-    check(sk == want_sk, "bg_step leaves the bytes under a pipe window (columns 12..16) alone")
+    want_sk = [0x55 if 12 <= c <= 17 else near5[y * 32 + c] for y in range(G.BG_ROWS) for c in range(32)]
+    check(sk == want_sk, "bg_step leaves the bytes under a pipe window (columns 12..17) alone")
     check(u16(mem, sym["res_bc"]) == 0x1234, "wait_vsync preserves BC (res_bc=%#x)" % u16(mem, sym["res_bc"]))
 
     # the whole image stays below the second screen page

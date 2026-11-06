@@ -328,7 +328,7 @@ bg_draw_all:
         ld      a,BG_Y_NEAR
         jr      bg_blit
 
-; bg_skipmap: v_skip[0..31] = 1 for the screen byte columns under a pipe's 5-byte window, and v_seg = the runs of
+; bg_skipmap: v_skip[0..31] = 1 for the screen byte columns under a pipe's 6-byte window, and v_seg = the runs of
 ; free columns as (start, length) byte pairs ending with length 0. Clobbers all.
 bg_skipmap:
         ld      hl,v_skip
@@ -346,16 +346,16 @@ sk_pipe:push    bc
         inc     a
         jr      nz,sk_next              ; x >= 256 or x < -256
         ld      a,l
-        cp      0xE0
-        jr      c,sk_next               ; x < -32: gone
+        cp      0xD8
+        jr      c,sk_next               ; x < -40: gone
 sk_ok:  sra     h
         rr      l
         sra     h
         rr      l
         sra     h
-        rr      l                       ; L = first window byte (-4..31)
+        rr      l                       ; L = first window byte (-5..31)
         ld      a,l
-        ld      b,5
+        ld      b,6
 sk_b:   bit     7,a
         jr      nz,sk_nx
         cp      32
@@ -492,12 +492,12 @@ bgs_go: push    af
 ; ---------------------------------------------------------------- pipes ----
 ; seg  HL = first source byte, B = rows (0 = none), DE = destination. Copies v_n bytes per row, rows are
 ; 32 bytes apart. Returns DE = start position of the next row. Needs v_n16 (= n) and v_adj (= 32 - n).
-; ~210 T-states per row for n = 5. Clobbers AF,BC,HL.
+; ~170 T-states per row for n = 6. Clobbers AF,BC,HL.
 ; Rows from BG_Y_FAR down are in the parallax band: there the window is merged with the background instead of
 ; copied. Window byte 0 and 3 keep the background pixels outside the pipe's 24 px footprint (masks patched into
-; merge5 by draw_pipe), bytes 1 and 2 are all pipe, byte 4 is background. A complete window (v_full: 5 bytes, nothing
-; clipped) is merged straight into the screen (~320 T-states per row), a clipped one is merged into v_tmp and
-; copied (~450).
+; merge6 by draw_pipe), bytes 1 and 2 are all pipe, bytes 4 and 5 are background. A complete window (v_full: 6 bytes, nothing
+; clipped) is merged straight into the screen (~340 T-states per row), a clipped one is merged into v_tmp and
+; copied (~470).
 seg:
         ld      a,b
         or      a
@@ -539,8 +539,11 @@ seg_band0:
         ld      (v_q),a
         jr      seg_band
 seg_row:ld      hl,(v_src)
-        ld      bc,(v_n16)
-        ldir
+seg_jr: jr      seg_ldi                 ; patched by draw_pipe: skips 6 - n of the LDIs below
+seg_ldi:
+        rept    6
+        ldi
+        endr
         ld      a,(v_adj)
         add     a,e
         ld      e,a
@@ -569,14 +572,14 @@ seg_band:                               ; v_q rows, DE = first of them
         or      a
         jr      z,sb_gen
 sb_row: ld      hl,(v_src)
-        call    merge5
+        call    merge6
         ld      a,e
-        add     a,28
+        add     a,27
         ld      e,a
         jr      nc,sb_n1
         inc     d
 sb_n1:  ld      a,c
-        add     a,28
+        add     a,27
         ld      c,a
         jr      nc,sb_n2
         inc     b
@@ -584,7 +587,7 @@ sb_n2:  ld      hl,v_q
         dec     (hl)
         jr      nz,sb_row
         ret
-sb_gen:                                 ; clipped window: merge all 5 bytes into v_tmp, copy the n that are on screen
+sb_gen:                                 ; clipped window: merge all 6 bytes into v_tmp, copy the n that are on screen
         push    de
         ld      hl,(v_src)
         ld      a,(v_k)
@@ -605,7 +608,7 @@ sg2_row:push    de
         dec     b
 sg2_a:  ld      hl,(v_sbase)
         ld      de,v_tmp
-        call    merge5
+        call    merge6
         ld      a,(v_k)
         ld      c,a
         ld      b,0
@@ -631,9 +634,9 @@ sg2_b:  pop     bc
         jr      nz,sg2_row
         ret
 
-; merge5  HL = 5 pattern bytes, BC = 5 background bytes, DE = destination -> (bg & kL) | p0, p1, p2,
-; (bg & kR) | p3, bg4 written. HL, BC, DE end on the last byte. Clobbers AF.
-merge5:
+; merge6  HL = 6 pattern bytes, BC = 6 background bytes, DE = destination -> (bg & kL) | p0, p1, p2,
+; (bg & kR) | p3, bg4, bg5 written. HL, BC, DE end on the last byte. Clobbers AF.
+merge6:
         ld      a,(bc)
 seg_kl: and     0                       ; patched: background bits left of the pipe
         or      (hl)
@@ -658,7 +661,11 @@ seg_kr: and     0                       ; patched: background bits right of the 
         inc     bc
         inc     de
         ld      a,(bc)
-        ld      (de),a                  ; trailing byte: background
+        ld      (de),a                  ; trailing bytes: background
+        inc     bc
+        inc     de
+        ld      a,(bc)
+        ld      (de),a
         ret
 
 ; seg_gap  B = rows, DE = destination: v_n bytes per row (v_n16, v_adj as for seg) cleared, except in the band,
@@ -710,11 +717,11 @@ sg_nc:  ld      a,(v_rows)
 ; kl_tab: background bits left of the pipe in the window's first byte, by pixel shift (top s bits)
 kl_tab: defb    0x00,0x80,0xC0,0xE0,0xF0,0xF8,0xFC,0xFE
 
-; draw_pipe  IX = pipe (x signed 16 bit, gap top, flags). Draws the pipe's 5-byte-wide window (24 px pipe +
-; 7 px shift + 1 byte trailing blank that erases what the 2 px step leaves behind) for rows 16..175, clipped to
+; draw_pipe  IX = pipe (x signed 16 bit, gap top, flags). Draws the pipe's 6-byte-wide window (24 px pipe +
+; 7 px shift + 2 bytes trailing blank that erase what a step of up to 16 px leaves behind) for rows 16..175, clipped to
 ; columns 0..31. Gap rows are only touched when the window covers a bird column (8 or 9): that wipes the old
 ; bird there, and v_cov records which bird columns were cleaned (bit 0 = col 8, bit 1 = col 9).
-; Draws nothing when x < -32 or x >= 256. Clobbers all but IX.
+; Draws nothing when x < -40 or x >= 256. Clobbers all but IX.
 draw_pipe:
         ld      l,(ix+0)
         ld      h,(ix+1)
@@ -724,7 +731,7 @@ draw_pipe:
         inc     a
         ret     nz                      ; x >= 256 or x < -256
         ld      a,l
-        cp      0xE0                    ; x < -32: gone (x -32..-24 still draws blank to wipe col 0)
+        cp      0xD8                    ; x < -40: gone (x -40..-25 still draws blank to wipe col 0, 1)
         ret     c
         and     7
         ld      (v_s),a
@@ -732,15 +739,15 @@ draw_pipe:
         rrca
         rrca
         rrca
-        and     0x1F                    ; 28..31 -> window starts 4..1 bytes left of the screen
+        and     0x1F                    ; 27..31 -> window starts 5..1 bytes left of the screen
         ld      c,a
         ld      a,32
         sub     c
         ld      (v_k),a                 ; k = bytes to skip
         ld      c,a
-        ld      a,5
+        ld      a,6
         sub     c
-        ld      (v_n),a                 ; n = 5 - k
+        ld      (v_n),a                 ; n = 6 - k
         xor     a
         ld      (v_dc),a
         jr      dp_geom
@@ -758,9 +765,9 @@ dp_pos: ld      a,l
         ld      (v_k),a
         ld      a,32
         sub     c                       ; room to the right edge: 1..32
-        cp      5
+        cp      6
         jr      c,dp_n
-        ld      a,5
+        ld      a,6
 dp_n:   ld      (v_n),a
 dp_geom:
         ; --- which bird columns does the window cover?
@@ -793,7 +800,7 @@ dp_c9:  ld      a,(v_cov)
         ld      a,1
         ld      (v_ovl),a
 dp_nocov:
-        ; --- masks for merge5 (background bits outside the 24 px footprint); complete window (5 bytes, none clipped)?
+        ; --- masks for merge6 (background bits outside the 24 px footprint); complete window (6 bytes, none clipped)?
         ld      a,(v_s)
         ld      e,a
         ld      d,0
@@ -806,7 +813,7 @@ dp_nocov:
         xor     a
         ld      (v_full),a
         ld      a,(v_n)
-        cp      5
+        cp      6
         jr      nz,dp_nf
         ld      a,(v_k)
         or      a
@@ -823,12 +830,15 @@ dp_nf:
         ld      a,32
         sub     c
         ld      (v_adj),a
+        ld      a,6
+        sub     c
+        add     a,a                     ; 2 bytes per LDI
+        ld      (seg_jr + 1),a          ; enter the unrolled copy of seg_row n LDIs before its end
         ld      a,(v_s)
-        rlca
-        rlca
-        rlca
-        rlca
-        and     0xF0
+        rrca
+        rrca
+        rrca                    ; * 32: the stride of one shift in pipe_tab
+        and     0xE0
         ld      e,a
         ld      d,0
         ld      hl,pipe_tab
@@ -872,17 +882,17 @@ dp_bot: call    dp_cap
 ; dp_cap: 8 cap rows (edge, 6 fill, edge). DE in/out as in seg. Clobbers AF,BC,HL.
 dp_cap:
         ld      hl,(v_pb)
-        ld      bc,5
+        ld      bc,6
         add     hl,bc
         ld      b,1
         call    seg                     ; edge
         ld      hl,(v_pb)
-        ld      bc,10
+        ld      bc,12
         add     hl,bc
         ld      b,6
         call    seg                     ; fill
         ld      hl,(v_pb)
-        ld      bc,5
+        ld      bc,6
         add     hl,bc
         ld      b,1
         jp      seg                     ; edge

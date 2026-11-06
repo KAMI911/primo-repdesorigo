@@ -3,7 +3,7 @@ defc N_PIPES      = 3
 defc PIPE_SZ      = 4                   ; x lo, x hi (signed), gap top, flags (bit 0 = scored)
 defc N_LEVELS     = 3                   ; per level (speed_tab / space_tab): start speed 3,4,5 px per game frame, pipe spacing 112,128,144, gravity 0x28,0x32,0x3C, terminal velocity 4,5,6
 defc PIPE_X0      = 200                 ; first pipe at game start
-defc PIPE_MIN_X   = -32                 ; below this the pipe is gone (one blank draw at x >= -32 wipes its last pixels)
+defc PIPE_MIN_X   = -40                 ; below this the pipe is gone (one blank draw at x >= -40 wipes its last pixels, even at 16 px/frame)
 defc GAP_H        = 60
 defc GT_MIN       = 40                  ; gap top 40, 44 .. 92: a multiple of 4, so pipe edges fall on colour cell rows
 defc GT_STEP      = 4
@@ -27,4 +27,4 @@ defc SCORE_X      = 40                  ; pipe counts as passed when x < 40 (rig
 defc SCORE_MAX    = 999
 defc FLAP_VY      = 0xFD00              ; -3.0 px/frame
 defc SPEED_EVERY  = 4                   ; every 4 points the pipes get 1 px/frame faster ... (score mod 4 uses only the low byte: 256 is a multiple)
-defc SPEED_MAX    = 8                   ; ... up to this (the pipe window's trailing blank byte erases at most 8 px per step)
+defc SPEED_MAX    = 16                  ; ... up to this (the pipe window's 2 trailing blank bytes erase at most 16 px per step)

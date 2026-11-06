@@ -144,7 +144,7 @@ menu_level:
         call    draw_glyph
         ld      bc,15 * 256 + 30
         call    text_dest
-        ld      a,CH_V
+        ld      a,CH_DOWN
         call    draw_glyph
         ld      hl,s_best
         ld      bc,23 * 256 + 10
@@ -419,8 +419,8 @@ pl_noflap:
         call    beep
         ld      bc,0x0C3C
         call    beep
-pl_draw:call    bg_step                 ; one parallax layer scrolls, then pipes and bird are drawn over it
-        call    render_frame
+pl_draw:call    render_frame            ; pipes and bird first (right after vsync, ahead of the beam) ...
+        call    bg_step                 ; ... then one parallax layer scrolls (the pipe windows are skipped by the blit)
         call    collide_all
         or      a
         jr      nz,pl_dead

@@ -72,7 +72,7 @@ tbg_stp:push    bc
         ld      de,res_bgscr
         ld      bc,2 * BG_ROWS * 32
         ldir
-        ld      a,0x55                  ; a pipe at x = 100 (window = byte columns 12..16): bg_step must not touch them
+        ld      a,0x55                  ; a pipe at x = 100 (window = byte columns 12..17): bg_step must not touch them
         call    fill_screen
         ld      hl,v_pipes
         ld      (hl),100

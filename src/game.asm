@@ -80,7 +80,10 @@ vmax_tab:
         defb    4,5,6
 ; bird_dg: signed gravity offset per bird (Rigó, Lúd, Kacsa, Kakukk): small differences in how each one drops
 bird_dg:
-        defb    0,-6,3,8
+        defb    0,-6,3,40               ; the Kakukk falls much harder (about twice the gravity of the easy level) ...
+; bird_dv: terminal velocity bonus per bird, px/frame ... and drops faster at the end, too
+bird_dv:
+        defb    0,0,0,2
 
 ; level_setup  A = level -> v_level (out of range = 0), v_speed, v_grav, v_vmax, v_space, v_cycle and v_best = that level's best.
 ; Clobbers AF,BC,DE,HL.
@@ -156,8 +159,8 @@ ps_loop:ld      l,(ix+0)
         inc     a
         jr      nz,ps_keep              ; x >= 0
         ld      a,l
-        cp      0xE0
-        jr      nc,ps_keep              ; -32 <= x < 0
+        cp      0xD8
+        jr      nc,ps_keep              ; -40 <= x < 0 (PIPE_MIN_X)
         ld      de,(v_cycle)
         add     hl,de
         push    hl
@@ -174,8 +177,8 @@ ps_keep:ld      (ix+0),l
         djnz    ps_loop
         ret
 
-; bird_step: one frame of physics. vy += v_grav + bird_dg[v_bird] (capped at v_vmax), y += vy, clamped to PLAY_TOP .. BIRD_YMAX
-; (vy = 0 when clamped). Clobbers AF,DE,HL.
+; bird_step: one frame of physics. vy += v_grav + bird_dg[v_bird] (capped at v_vmax + bird_dv[v_bird]), y += vy, clamped to
+; PLAY_TOP .. BIRD_YMAX (vy = 0 when clamped). Clobbers AF,BC,DE,HL.
 bird_step:
         ld      a,(v_bird)
         and     3
@@ -185,17 +188,21 @@ bird_step:
         add     hl,de
         ld      a,(v_grav)
         add     a,(hl)
-        ld      e,a
+        ld      c,a                     ; C = gravity
+        ld      hl,bird_dv
+        add     hl,de
+        ld      a,(v_vmax)
+        add     a,(hl)
+        ld      b,a                     ; B = terminal velocity
+        ld      e,c
         ld      hl,(v_vy)
         add     hl,de                   ; d is still 0
         bit     7,h
         jr      nz,bs_vok
-        ld      a,(v_vmax)
-        ld      e,a
         ld      a,h
-        cp      e
+        cp      b
         jr      c,bs_vok
-        ld      h,e
+        ld      h,b
         ld      l,0
 bs_vok: ld      (v_vy),hl
         ld      de,(v_y)

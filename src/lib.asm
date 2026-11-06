@@ -215,7 +215,7 @@ mc_row: push    bc
 
 ; pipe_colour  IX = pipe (colour model): the four colour rows of the parallax band (2 per layer; gap bottoms are at
 ; most at row 152, so a window's band rows are always pipe) get nibble 0 (white ink) under the pipe's 24 px
-; footprint, so the layer colours do not tint the pipe; the other cells of its 5-byte window get their layer's
+; footprint, so the layer colours do not tint the pipe; the other cells of its 6-byte window get their layer's
 ; nibble back. Same x range as draw_pipe. Clobbers all but IX.
 defc BG_COLROW  = COLOR_TOP / 4 + BG_Y_FAR / 4   ; first colour RAM row of the band
 pipe_colour:
@@ -227,18 +227,18 @@ pipe_colour:
         inc     a
         ret     nz                      ; x >= 256 or x < -256
         ld      a,l
-        cp      0xE0
-        ret     c                       ; x < -32: gone
+        cp      0xD8
+        ret     c                       ; x < -40: gone
 pc_ok:  ld      (v_px),hl
         sra     h
         rr      l
         sra     h
         rr      l
         sra     h
-        rr      l                       ; L = first window byte, -4..31
+        rr      l                       ; L = first window byte, -5..31
         ld      a,l
         ld      (v_pc),a
-        ld      a,5
+        ld      a,6
         ld      (v_pn),a
 pc_loop:ld      a,(v_pc)
         bit     7,a
