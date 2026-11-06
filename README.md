@@ -81,17 +81,3 @@ alsó 4 sárga (`menu_colour`, 5-ös paletta-csoport).
 
 Játékmenet: 256×192 pixel, a felső 16 sor a HUD, alul 16 sor föld. A csövek 3–16 pixelt lépnek játékkockánként (a cső 6 bájtos ablaka törli a nyomát),
 25 játékkocka/s (két képváltásonként egy). A rajzolás lépésenként csak a mozgó csöveket és a madarat frissíti.
-
-## Mit teszteltünk, és mit nem
-
-Lefutott (`make test`):
-- `row_addr` mind a 192 sorra, a véletlen-generátor periódusa (65535), `gap_map` tartománya, `to_dec3` 0..1100;
-- `draw_pipe` 322 esetre (x = −34 … 265, szélső rések) pixelpontosan egy független Python-modell ellen,
-  beleértve a képernyő széleinél való vágást és azt, hogy a rutin a saját ablakán kívül nem ír;
-- sprite-, szöveg- és számrajzolás (vágással), `bird_step`, `collide_all`, `score_check`, `pipes_step`, `pipes_reset`;
-- teljes játékhurok autopilottal mind a 4 madárral, 5 különböző véletlen magra és 4000 kockán át; tétlen játékos
-  esetén game over; „új rekord” ág; színes építés (paletta, színes RAM);
-- mutációs ellenőrzés: szándékosan elrontott csőszélesség, ütközési határ és pontszám-jelző mellett a tesztek elbuknak.
-
-A szintek indulósebessége 3 / 4 / 5 képpont képkockánként (`speed_tab`), és játék közben **egyre gyorsul**: minden 4. pont után
-1 képponttal gyorsabban jönnek a csövek, legfeljebb 16-ig (`SPEED_EVERY`, `SPEED_MAX` a `game.inc`-ben).
