@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4   # pin to a commit SHA once you have chosen a version
-      - run: pip install pillow     # only for `make shots`; tests themselves need just the standard library
+      - run: sudo apt-get update && sudo apt-get install -y python3-pil   # only for `make shots`; system package, because the tests run with `python3 -I` (ignores user site-packages)
       - run: make test
       - run: make
       - run: make shots
